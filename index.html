@@ -2111,12 +2111,12 @@ async function dbLoadFilaments() {
   return data.map(r => ({
     id: r.id, type: r.type||'', color: r.color||'', colorHex: r.color_hex||'#888',
     brand: r.brand||'', totalWeight: r.total_weight||1000, remaining: r.remaining||0,
-    costPerKg: r.cost_per_kg||20, notes: r.notes||''
+    costPerKg: r.cost_per_kg||20, notes: r.notes||'', threshold: r.threshold||200
   }));
 }
 async function dbUpsertFilament(f) {
   const row = { type:f.type, color:f.color, color_hex:f.colorHex, brand:f.brand,
-    total_weight:f.totalWeight, remaining:f.remaining, cost_per_kg:f.costPerKg, notes:f.notes };
+    total_weight:f.totalWeight, remaining:f.remaining, cost_per_kg:f.costPerKg, notes:f.notes, threshold:f.threshold||200 };
   if (f.id) {
     const { error } = await sb.from('filaments').update(row).eq('id', f.id);
     if (error) throw error; return f.id;
@@ -4534,8 +4534,8 @@ function getFilteredSortedFilaments() {
     switch(sort) {
       case 'remaining_asc': return a.remaining - b.remaining;
       case 'remaining_desc': return b.remaining - a.remaining;
-      case 'pct_asc': return (a.remaining/a.total) - (b.remaining/b.total);
-      case 'pct_desc': return (b.remaining/b.total) - (a.remaining/a.total);
+      case 'pct_asc': return (a.remaining/a.totalWeight) - (b.remaining/b.totalWeight);
+      case 'pct_desc': return (b.remaining/b.totalWeight) - (a.remaining/a.totalWeight);
       case 'brand': return a.brand.localeCompare(b.brand);
       case 'type': return a.type.localeCompare(b.type);
       case 'status': return statusOrder[getFilStatus(b)] - statusOrder[getFilStatus(a)];
@@ -5369,7 +5369,7 @@ function addFilament() {
   var total = parseFloat(document.getElementById('fa_total').value)||1000;
   var remaining = Math.min(parseFloat(document.getElementById('fa_remaining').value)||total, total);
   var threshold = parseFloat(document.getElementById('fa_threshold').value)||200;
-  filaments.push({id:nextFilId++, brand:brand, type:type, color:color, colorHex:colorHex, total:total, remaining:remaining, threshold:threshold});
+  filaments.push({id:nextFilId++, brand:brand, type:type, color:color, colorHex:colorHex, totalWeight:total, remaining:remaining, threshold:threshold});
   saveFilaments();
   toggleAddFilForm();
   document.getElementById('fa_brand').value='';
@@ -5411,7 +5411,7 @@ function renderFilamentCard(id) {
   if(el) el.outerHTML = buildFilCard(f);
 }
 function buildFilCard(f) {
-  var pct = f.total>0 ? Math.max(0,Math.min(100,(f.remaining/f.total)*100)) : 0;
+  var pct = f.totalWeight>0 ? Math.max(0,Math.min(100,(f.remaining/f.totalWeight)*100)) : 0;
   var status = getFilStatus(f);
   var barColor = status==='ok' ? '#4dff9e' : status==='low' ? '#ffb432' : '#ff4d4d';
   var badgeClass = 'fil-badge-'+status;
