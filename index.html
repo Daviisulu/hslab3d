@@ -6,6 +6,7 @@
 <title>HS Lab 3D — Gestionale v2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 
 :root {
@@ -2054,62 +2055,286 @@ var BAR_COLORS = ['#4d9eff','#4dff9e','#ffb432','#ff4d4d','#c97dff','#888','#ff7
 
 // ---- INIT ----
 // ============================================================
-// LOGIN — credenziali utenti
-// Cambia questi valori con le password che preferisci
+// SUPABASE — configurazione
+// ============================================================
+const SUPABASE_URL = 'https://ahpjndwxherfefvofebq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_f1xceThBpNQs8zfcPcKzCg_A2pviKhb';
+var sb = null;
+
+function initSupabase() {
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+}
+
+// ---- AUTH ----
+async function sbLogin(email, password) {
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+async function sbLogout() { await sb.auth.signOut(); }
+async function sbGetUser() {
+  const { data } = await sb.auth.getUser();
+  return data?.user || null;
+}
+
+// ---- CLIENTI ----
+async function dbLoadClienti() {
+  const { data, error } = await sb.from('clienti').select('*').order('id');
+  if (error) throw error;
+  return data.map(r => ({
+    id: r.id, nome: r.nome||'', cognome: r.cognome||'', azienda: r.azienda||'',
+    email: r.email||'', tel: r.tel||'', canale: r.canale||'', citta: r.citta||'',
+    piva: r.piva||'', tipo: r.tipo||'', note: r.note||'',
+    createdAt: new Date(r.created_at).getTime()
+  }));
+}
+async function dbUpsertCliente(c) {
+  const row = { nome:c.nome, cognome:c.cognome, azienda:c.azienda, email:c.email,
+    tel:c.tel, canale:c.canale, citta:c.citta, piva:c.piva, tipo:c.tipo, note:c.note };
+  if (c.id) {
+    const { error } = await sb.from('clienti').update(row).eq('id', c.id);
+    if (error) throw error; return c.id;
+  } else {
+    const { data, error } = await sb.from('clienti').insert(row).select('id').single();
+    if (error) throw error; return data.id;
+  }
+}
+async function dbDeleteCliente(id) {
+  const { error } = await sb.from('clienti').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---- FILAMENTS ----
+async function dbLoadFilaments() {
+  const { data, error } = await sb.from('filaments').select('*').order('id');
+  if (error) throw error;
+  return data.map(r => ({
+    id: r.id, type: r.type||'', color: r.color||'', colorHex: r.color_hex||'#888',
+    brand: r.brand||'', totalWeight: r.total_weight||1000, remaining: r.remaining||0,
+    costPerKg: r.cost_per_kg||20, notes: r.notes||''
+  }));
+}
+async function dbUpsertFilament(f) {
+  const row = { type:f.type, color:f.color, color_hex:f.colorHex, brand:f.brand,
+    total_weight:f.totalWeight, remaining:f.remaining, cost_per_kg:f.costPerKg, notes:f.notes };
+  if (f.id) {
+    const { error } = await sb.from('filaments').update(row).eq('id', f.id);
+    if (error) throw error; return f.id;
+  } else {
+    const { data, error } = await sb.from('filaments').insert(row).select('id').single();
+    if (error) throw error; return data.id;
+  }
+}
+async function dbDeleteFilament(id) {
+  const { error } = await sb.from('filaments').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---- PREVENTIVI CALCOLATI ----
+async function dbLoadPrevCalc() {
+  const { data, error } = await sb.from('preventivi_calcolati').select('*').order('created_at', {ascending:false});
+  if (error) throw error;
+  return data.map(r => ({
+    id: r.id, filename: r.filename, type: r.type, date: r.date, qty: r.qty,
+    total: r.total, base: r.base, markup_amt: r.markup_amt, unit_price: r.unit_price,
+    items: r.items||[], oggetti: r.oggetti||[], notes: r.notes,
+    clienteId: r.cliente_id, cliente: r.cliente_snap,
+    bobinaId: r.bobina_id, bobina: r.bobina_snap
+  }));
+}
+async function dbUpsertPrevCalc(p) {
+  const row = { id:p.id, filename:p.filename, type:p.type, date:p.date, qty:p.qty||1,
+    total:p.total, base:p.base, markup_amt:p.markup_amt, unit_price:p.unit_price,
+    items:p.items, oggetti:p.oggetti, notes:p.notes,
+    cliente_id:p.clienteId||null, cliente_snap:p.cliente||null,
+    bobina_id:p.bobinaId||null, bobina_snap:p.bobina||null };
+  const { error } = await sb.from('preventivi_calcolati').upsert(row);
+  if (error) throw error;
+}
+async function dbDeletePrevCalc(id) {
+  const { error } = await sb.from('preventivi_calcolati').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---- PREVENTIVI UFFICIALI ----
+async function dbLoadPrevUff() {
+  const { data, error } = await sb.from('preventivi_ufficiali').select('*').order('created_at', {ascending:false});
+  if (error) throw error;
+  return data.map(r => ({
+    id: r.id, numero: r.numero, data: r.data, descrizione: r.descrizione,
+    stato: r.stato||'bozza', categoria: r.categoria, sconto: r.sconto||0,
+    totale: r.totale||0, voci: r.voci||[], note: r.note,
+    clienteId: r.cliente_id, clienteSnap: r.cliente_snap,
+    createdAt: new Date(r.created_at).getTime()
+  }));
+}
+async function dbUpsertPrevUff(p) {
+  const row = { numero:p.numero, data:p.data, descrizione:p.descrizione, stato:p.stato,
+    categoria:p.categoria, sconto:p.sconto||0, totale:p.totale||0, voci:p.voci||[],
+    note:p.note, cliente_id:p.clienteId||null, cliente_snap:p.clienteSnap||null };
+  if (p.id) {
+    const { error } = await sb.from('preventivi_ufficiali').update(row).eq('id', p.id);
+    if (error) throw error; return p.id;
+  } else {
+    const { data, error } = await sb.from('preventivi_ufficiali').insert(row).select('id').single();
+    if (error) throw error; return data.id;
+  }
+}
+async function dbDeletePrevUff(id) {
+  const { error } = await sb.from('preventivi_ufficiali').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---- JOBS ----
+async function dbLoadJobs() {
+  const { data, error } = await sb.from('jobs').select('*').order('created_at', {ascending:false});
+  if (error) throw error;
+  return data.map(r => ({
+    id: r.id, name: r.name, status: r.status||'planned', startDate: r.start_date,
+    printHours: r.print_hours||0, deliveryDays: r.delivery_days||1,
+    priority: r.priority||'normal', note: r.note,
+    clienteId: r.cliente_id, prevId: r.prev_id,
+    createdAt: new Date(r.created_at).getTime()
+  }));
+}
+async function dbUpsertJob(j) {
+  const row = { name:j.name, status:j.status, start_date:j.startDate||null,
+    print_hours:j.printHours||0, delivery_days:j.deliveryDays||1,
+    priority:j.priority||'normal', note:j.note,
+    cliente_id:j.clienteId||null, prev_id:j.prevId||null };
+  if (j.id) {
+    const { error } = await sb.from('jobs').update(row).eq('id', j.id);
+    if (error) throw error; return j.id;
+  } else {
+    const { data, error } = await sb.from('jobs').insert(row).select('id').single();
+    if (error) throw error; return data.id;
+  }
+}
+async function dbDeleteJob(id) {
+  const { error } = await sb.from('jobs').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---- FATTURE ----
+async function dbLoadFatture() {
+  const { data, error } = await sb.from('fatture').select('*').order('created_at', {ascending:false});
+  if (error) throw error;
+  return data.map(r => ({
+    id: r.id, numero: r.numero, data: r.data, scadenza: r.scadenza,
+    stato: r.stato||'emessa', regime: r.regime||'forfettario',
+    descrizione: r.descrizione, voci: r.voci||[], totale: r.totale||0,
+    metodo: r.metodo, dataPagamento: r.data_pagamento, note: r.note,
+    clienteId: r.cliente_id, clienteSnap: r.cliente_snap, prevId: r.prev_id,
+    createdAt: new Date(r.created_at).getTime()
+  }));
+}
+async function dbUpsertFattura(f) {
+  const row = { numero:f.numero, data:f.data, scadenza:f.scadenza||null,
+    stato:f.stato, regime:f.regime||'forfettario', descrizione:f.descrizione,
+    voci:f.voci||[], totale:f.totale||0, metodo:f.metodo,
+    data_pagamento:f.dataPagamento||null, note:f.note,
+    cliente_id:f.clienteId||null, cliente_snap:f.clienteSnap||null, prev_id:f.prevId||null };
+  if (f.id) {
+    const { error } = await sb.from('fatture').update(row).eq('id', f.id);
+    if (error) throw error; return f.id;
+  } else {
+    const { data, error } = await sb.from('fatture').insert(row).select('id').single();
+    if (error) throw error; return data.id;
+  }
+}
+async function dbDeleteFattura(id) {
+  const { error } = await sb.from('fatture').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---- MOVIMENTI ----
+async function dbLoadMovimenti() {
+  const { data, error } = await sb.from('movimenti').select('*').order('created_at', {ascending:false});
+  if (error) throw error;
+  return data.map(r => ({
+    id: r.id, tipo: r.tipo, data: r.data, importo: r.importo,
+    descrizione: r.descrizione, categoria: r.categoria,
+    metodo: r.metodo, note: r.note, createdAt: new Date(r.created_at).getTime()
+  }));
+}
+async function dbUpsertMovimento(m) {
+  const row = { tipo:m.tipo, data:m.data, importo:m.importo, descrizione:m.descrizione,
+    categoria:m.categoria, metodo:m.metodo, note:m.note };
+  if (m.id) {
+    const { error } = await sb.from('movimenti').update(row).eq('id', m.id);
+    if (error) throw error; return m.id;
+  } else {
+    const { data, error } = await sb.from('movimenti').insert(row).select('id').single();
+    if (error) throw error; return data.id;
+  }
+}
+async function dbDeleteMovimento(id) {
+  const { error } = await sb.from('movimenti').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---- IMPOSTAZIONI ----
+async function dbSaveImpostazioni(settings, extras, scriptUrl, fattScriptUrl) {
+  const { error } = await sb.from('impostazioni').update({
+    settings, extras, script_url:scriptUrl, fatt_script_url:fattScriptUrl,
+    updated_at: new Date().toISOString()
+  }).eq('id', 1);
+  if (error) throw error;
+}
+
+// ============================================================
+// LOGIN con Supabase
 // ============================================================
 var USERS = {
   user1: { nome: 'Daviisulu', password: 'hslab2024' },
   user2: { nome: 'Enrico', password: 'hslab2024' }
 };
 
-function doLogin() {
+async function doLogin() {
   var userId = document.getElementById('login-user').value;
   var password = document.getElementById('login-password').value;
   var errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
 
-  if (!userId) {
-    errEl.textContent = 'Seleziona un utente.';
-    errEl.style.display = 'block';
-    return;
-  }
-  if (!password) {
-    errEl.textContent = 'Inserisci la password.';
-    errEl.style.display = 'block';
-    return;
-  }
-  var user = USERS[userId];
-  if (!user || user.password !== password) {
-    errEl.textContent = 'Password errata. Riprova.';
+  if (!userId) { errEl.textContent = 'Seleziona un utente.'; errEl.style.display = 'block'; return; }
+  if (!password) { errEl.textContent = 'Inserisci la password.'; errEl.style.display = 'block'; return; }
+
+  // Mappa utente → email Supabase
+  var emailMap = {
+    user1: 'daviisulu@gmail.com',
+    user2: 'enrico@hslab3d.it'  // aggiorna con l'email reale di Enrico
+  };
+
+  try {
+    var email = emailMap[userId];
+    await sbLogin(email, password);
+    var nomeUtente = USERS[userId].nome;
+    document.getElementById('login-screen').style.display = 'none';
+    showCurrentUser(nomeUtente);
+    await loadAllFromDB();
+    showPage('dashboard', document.querySelector('.nav-item.active'));
+  } catch(e) {
+    errEl.textContent = 'Email o password errati. Riprova.';
     errEl.style.display = 'block';
     document.getElementById('login-password').value = '';
-    return;
   }
-
-  // Login ok — salva sessione e mostra app
-  sessionStorage.setItem('hs_user', JSON.stringify({ id: userId, nome: user.nome }));
-  document.getElementById('login-screen').style.display = 'none';
-  showCurrentUser(user.nome);
-  init();
 }
 
-function checkLogin() {
-  var session = sessionStorage.getItem('hs_user');
-  if (session) {
-    try {
-      var user = JSON.parse(session);
-      document.getElementById('login-screen').style.display = 'none';
-      showCurrentUser(user.nome);
-      return true;
-    } catch(e) {}
+async function checkLogin() {
+  initSupabase();
+  var user = await sbGetUser();
+  if (user) {
+    var nome = user.email.includes('daviisulu') ? 'Daviisulu' : 'Enrico';
+    document.getElementById('login-screen').style.display = 'none';
+    showCurrentUser(nome);
+    return true;
   }
   return false;
 }
 
 function doLogout() {
   if (!confirm('Vuoi uscire dall\'account?')) return;
-  sessionStorage.removeItem('hs_user');
-  location.reload();
+  sbLogout().then(function(){ location.reload(); });
 }
 
 function showCurrentUser(nome) {
@@ -2138,34 +2363,15 @@ function showCurrentUser(nome) {
 }
 
 function init() {
+  // I dati vengono caricati da loadAllFromDB() — questa funzione
+  // si occupa solo di inizializzare l'UI e mostrare la dashboard
   try {
-  var s = localStorage.getItem('s3d_settings');
-  if(s) { settings = JSON.parse(s); applySettings(); }
-  var e = localStorage.getItem('s3d_extras');
-  if(e) { extras = JSON.parse(e); nextExtraId = extras.reduce(function(m,x){return Math.max(m,x.id+1);},1); }
-  var h = localStorage.getItem('s3d_history');
-  if(h) preventivi = JSON.parse(h);
-  var c = localStorage.getItem('s3d_clienti');
-  if(c) { clienti = JSON.parse(c); nextCliId = clienti.reduce(function(m,x){return Math.max(m,x.id+1);},1); }
-  loadFilaments();
-  loadJobs();
-  loadPreventiviUfficiali();
-  loadMovimenti();
-  loadFatture();
-  updateNavCounts();
-  renderExtrasChecklist();
-  renderExtrasMgmt();
-  renderPresetChips();
-  renderCalcBobinaTag();
-  renderCalcClienteTag();
-  addOggettoRow();
-  liveCalc();
-  updateTemplateStatus();
-  // Check deadlines on load and every 10 minutes
-  setTimeout(checkJobDeadlines, 800);
-  setInterval(checkJobDeadlines, 10*60*1000);
+    addOggettoRow();
+    liveCalc();
+    updateTemplateStatus();
+    setTimeout(checkJobDeadlines, 800);
+    setInterval(checkJobDeadlines, 10*60*1000);
   } catch(err) { logErr('init(): '+err.message, '', err.lineNumber||''); }
-  // Always show calc page, even if something above failed
   showPage('dashboard', document.querySelector('.nav-item.active'));
 }
 
@@ -2434,8 +2640,9 @@ function loadFatture() {
   } catch(e){ logErr('loadFatture: '+e.message); }
 }
 function saveFatture() {
-  localStorage.setItem('s3d_fatture', JSON.stringify(fatture));
   updateNavCounts();
+  // Sync su Supabase in background
+  if(sb) fatture.forEach(function(f){ dbUpsertFattura(f).catch(function(e){logErr('saveFatture: '+e.message);}); });
 }
 function getNextFattNumero() {
   var anno = new Date().getFullYear();
@@ -2527,7 +2734,8 @@ function segnaPagata(id) {
 function deleteFattura(id) {
   if(!confirm('Eliminare questa fattura?')) return;
   fatture = fatture.filter(function(f){return f.id!==id;});
-  saveFatture(); renderFatture();
+  if(sb) dbDeleteFattura(id).catch(function(e){logErr('deleteFattura: '+e.message);});
+  updateNavCounts(); renderFatture();
 }
 
 // Fattura modal
@@ -2965,7 +3173,7 @@ function loadMovimenti() {
   } catch(e){ logErr('loadMovimenti: '+e.message); }
 }
 function saveMovimenti() {
-  localStorage.setItem('s3d_movimenti', JSON.stringify(movimenti));
+  if(sb) movimenti.forEach(function(m){ dbUpsertMovimento(m).catch(function(e){logErr('saveMovimenti: '+e.message);}); });
 }
 function setMovTipo(t) {
   movTipo = t;
@@ -3131,8 +3339,8 @@ function loadPreventiviUfficiali() {
   } catch(e){ logErr('loadPreventiviUfficiali: '+e.message); }
 }
 function savePreventiviUfficiali() {
-  localStorage.setItem('s3d_prev_ufficiali', JSON.stringify(preventiviUfficiali));
   updateNavCounts();
+  if(sb) preventiviUfficiali.forEach(function(p){ dbUpsertPrevUff(p).catch(function(e){logErr('savePrevUff: '+e.message);}); });
 }
 function getNextNumero() {
   var anno = new Date().getFullYear();
@@ -3915,7 +4123,7 @@ function calcola() {
       settings_snapshot:{mat_cost_kg:mat_cost_kg,waste:waste,markup_pct:markup_pct}
     };
     preventivi.unshift(record);
-    localStorage.setItem('s3d_history',JSON.stringify(preventivi));
+    if(sb) dbUpsertPrevCalc(record).catch(function(e){logErr('savePrevCalc: '+e.message);});
     updateNavCounts();
     renderResult(record);
     document.getElementById('result-section').style.display='block';
@@ -4199,7 +4407,7 @@ function closeModal(e) {
 }
 function deleteRecord(id) {
   preventivi = preventivi.filter(function(r){return r.id!==id;});
-  localStorage.setItem('s3d_history', JSON.stringify(preventivi));
+  if(sb) dbDeletePrevCalc(id).catch(function(e){logErr('deleteRecord: '+e.message);});
   updateNavCounts();
   renderHistory();
 }
@@ -4212,14 +4420,14 @@ function duplicateRecord(id) {
   copy.date = now.toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
   copy.filename = copy.filename + ' (copia)';
   preventivi.unshift(copy);
-  localStorage.setItem('s3d_history', JSON.stringify(preventivi));
+  if(sb) dbUpsertPrevCalc(copy).catch(function(e){logErr('duplicateRecord: '+e.message);});
   updateNavCounts();
   renderHistory();
 }
 function clearHistory() {
   if(!confirm('Eliminare tutti i preventivi salvati?')) return;
+  if(sb) preventivi.forEach(function(p){ dbDeletePrevCalc(p.id).catch(function(e){logErr('clearHistory: '+e.message);}); });
   preventivi = [];
-  localStorage.setItem('s3d_history', JSON.stringify(preventivi));
   updateNavCounts();
   renderHistory();
 }
@@ -4339,8 +4547,8 @@ function getFilteredSortedFilaments() {
 
 // ---- CLIENTI ----
 function saveClienti() {
-  localStorage.setItem('s3d_clienti', JSON.stringify(clienti));
   updateNavCounts();
+  if(sb) clienti.forEach(function(c){ dbUpsertCliente(c).catch(function(e){logErr('saveClienti: '+e.message);}); });
 }
 function openClienteModal(editId) {
   try {
@@ -4419,8 +4627,8 @@ function deleteCliente(id) {
   if(!confirm('Eliminare questo cliente?')) return;
   clienti = clienti.filter(function(c){ return c.id !== id; });
   if(selectedClienteId === id) selectedClienteId = null;
-  saveClienti();
-  renderClienti();
+  if(sb) dbDeleteCliente(id).catch(function(e){logErr('deleteCliente: '+e.message);});
+  updateNavCounts(); renderClienti();
   renderCalcClienteTag();
 }
 function renderClienti() {
@@ -4495,8 +4703,8 @@ function loadJobs() {
   if(j) { jobs = JSON.parse(j); nextJobId = jobs.reduce(function(m,x){return Math.max(m,x.id+1);},1); }
 }
 function saveJobs() {
-  localStorage.setItem('s3d_jobs', JSON.stringify(jobs));
   updateNavCounts();
+  if(sb) jobs.forEach(function(j){ dbUpsertJob(j).catch(function(e){logErr('saveJobs: '+e.message);}); });
 }
 
 // ---- TOAST ENGINE ----
@@ -4916,8 +5124,8 @@ function saveJob() {
 function deleteJob(id) {
   if(!confirm('Eliminare questo lavoro?'))return;
   jobs=jobs.filter(function(j){return j.id!==id;});
-  saveJobs();
-  renderCalendar();
+  if(sb) dbDeleteJob(id).catch(function(e){logErr('deleteJob: '+e.message);});
+  updateNavCounts(); renderCalendar();
 }
 function setJobStatus(id,status) {
   jobs.forEach(function(j){if(j.id===id)j.status=status;});
@@ -5145,9 +5353,9 @@ function loadFilaments() {
   if(f) { filaments = JSON.parse(f); nextFilId = filaments.reduce(function(m,x){return Math.max(m,x.id+1);},1); }
 }
 function saveFilaments() {
-  localStorage.setItem('s3d_filaments', JSON.stringify(filaments));
   document.getElementById('nav-fil-count').textContent = filaments.length||'0';
   renderBobinaSelector();
+  if(sb) filaments.forEach(function(f){ dbUpsertFilament(f).catch(function(e){logErr('saveFilaments: '+e.message);}); });
 }
 function toggleAddFilForm() {
   var f = document.getElementById('fil-add-form');
@@ -5171,8 +5379,8 @@ function addFilament() {
 }
 function deleteFilament(id) {
   filaments = filaments.filter(function(f){return f.id!==id;});
-  saveFilaments();
-  renderFilaments();
+  if(sb) dbDeleteFilament(id).catch(function(e){logErr('deleteFilament: '+e.message);});
+  saveFilaments(); renderFilaments();
 }
 function updateFilRemaining(id, val) {
   filaments.forEach(function(f){if(f.id===id){f.remaining=Math.max(0,Math.min(f.total,parseFloat(val)||0));}});
@@ -5436,17 +5644,56 @@ document.addEventListener('click',function(e){
   });
 })();
 
-// All'avvio: controlla se c'è già una sessione attiva
-if (!checkLogin()) {
-  // Nessuna sessione — mostra il login screen (già visibile di default)
-  // Imposta focus sul campo password al cambio utente
-  document.getElementById('login-user').addEventListener('change', function() {
-    if (this.value) setTimeout(function(){ document.getElementById('login-password').focus(); }, 50);
-  });
-} else {
-  // Sessione già attiva — avvia direttamente
-  init();
+async function loadAllFromDB() {
+  try {
+    // Impostazioni
+    var imp = await sb.from('impostazioni').select('*').eq('id',1).single();
+    if (imp.data) {
+      if (imp.data.settings && Object.keys(imp.data.settings).length) { settings = imp.data.settings; applySettings(); }
+      if (imp.data.extras && imp.data.extras.length) { extras = imp.data.extras; nextExtraId = extras.reduce(function(m,x){return Math.max(m,(x.id||0)+1);},1); }
+      if (imp.data.script_url) localStorage.setItem('s3d_script_url', imp.data.script_url);
+      if (imp.data.fatt_script_url) localStorage.setItem('s3d_fatt_script_url', imp.data.fatt_script_url);
+    }
+    // Dati
+    clienti = await dbLoadClienti();
+    nextCliId = clienti.reduce(function(m,x){return Math.max(m,x.id+1);},1);
+    filaments = await dbLoadFilaments();
+    nextFilId = filaments.reduce(function(m,x){return Math.max(m,x.id+1);},1);
+    preventivi = await dbLoadPrevCalc();
+    preventiviUfficiali = await dbLoadPrevUff();
+    nextPrevId = preventiviUfficiali.reduce(function(m,x){return Math.max(m,x.id+1);},1);
+    jobs = await dbLoadJobs();
+    nextJobId = jobs.reduce(function(m,x){return Math.max(m,x.id+1);},1);
+    fatture = await dbLoadFatture();
+    nextFattId = fatture.reduce(function(m,x){return Math.max(m,x.id+1);},1);
+    movimenti = await dbLoadMovimenti();
+    nextMovId = movimenti.reduce(function(m,x){return Math.max(m,x.id+1);},1);
+
+    updateNavCounts();
+    renderExtrasChecklist(); renderExtrasMgmt(); renderPresetChips();
+    renderCalcBobinaTag(); renderCalcClienteTag();
+    addOggettoRow(); liveCalc(); updateTemplateStatus();
+    setTimeout(checkJobDeadlines, 800);
+    setInterval(checkJobDeadlines, 10*60*1000);
+  } catch(err) {
+    logErr('loadAllFromDB(): ' + err.message);
+    throw err;
+  }
 }
+
+// ---- BOOTSTRAP ----
+(async function() {
+  initSupabase();
+  var loggedIn = await checkLogin();
+  if (loggedIn) {
+    await loadAllFromDB();
+    init();
+  } else {
+    document.getElementById('login-user').addEventListener('change', function() {
+      if (this.value) setTimeout(function(){ document.getElementById('login-password').focus(); }, 50);
+    });
+  }
+})();
 </script>
 
 
