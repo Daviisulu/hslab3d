@@ -2605,7 +2605,7 @@ function renderDashboard() {
         filEl.innerHTML = '<div class="dash-empty" style="padding:.75rem 0">Tutti i filamenti OK ✓</div>';
       } else {
         filEl.innerHTML = critici.map(function(f){
-          var pct = f.total>0?(f.remaining/f.total*100):0;
+          var pct = f.totalWeight>0?(f.remaining/f.totalWeight*100):0;
           var s = getFilStatus(f);
           var sc = s==='low'?'#fbbf24':'var(--red)';
           return '<div style="margin-bottom:10px">'+
@@ -5383,7 +5383,7 @@ function deleteFilament(id) {
   saveFilaments(); renderFilaments();
 }
 function updateFilRemaining(id, val) {
-  filaments.forEach(function(f){if(f.id===id){f.remaining=Math.max(0,Math.min(f.total,parseFloat(val)||0));}});
+  filaments.forEach(function(f){if(f.id===id){f.remaining=Math.max(0,Math.min(f.totalWeight,parseFloat(val)||0));}});
   saveFilaments();
   renderFilamentCard(id);
   renderAlerts();
@@ -5427,7 +5427,7 @@ function buildFilCard(f) {
     '</div>'+
     '<div class="fil-bar-wrap">'+
       '<div class="fil-bar-bg"><div class="fil-bar-fill" style="width:'+pct.toFixed(1)+'%;background:'+barColor+'"></div></div>'+
-      '<div class="fil-stats"><span>'+f.remaining.toFixed(0)+'g rimanenti</span><span>'+pct.toFixed(0)+'% · '+f.total+'g tot</span></div>'+
+      '<div class="fil-stats"><span>'+f.remaining.toFixed(0)+'g rimanenti</span><span>'+pct.toFixed(0)+'% · '+f.totalWeight+'g tot</span></div>'+
     '</div>'+
     '<span class="fil-badge '+badgeClass+'">'+badgeText+'</span>'+
     '<div class="fil-actions">'+
@@ -5437,7 +5437,7 @@ function buildFilCard(f) {
     '<div class="fil-edit-form" id="fil-edit-'+f.id+'">'+
       '<div class="grid2" style="gap:8px;margin-bottom:8px">'+
         '<div class="field"><label>Rimanente (g)</label>'+
-          '<div class="input-wrap"><input type="number" value="'+f.remaining+'" min="0" max="'+f.total+'" step="10" onchange="updateFilRemaining('+f.id+',this.value)"><span class="suffix">g</span></div></div>'+
+          '<div class="input-wrap"><input type="number" value="'+f.remaining+'" min="0" max="'+f.totalWeight+'" step="10" onchange="updateFilRemaining('+f.id+',this.value)"><span class="suffix">g</span></div></div>'+
         '<div class="field"><label>Soglia avviso (g)</label>'+
           '<div class="input-wrap"><input type="number" value="'+f.threshold+'" min="10" step="10" onchange="updateFilThreshold('+f.id+',this.value)"><span class="suffix">g</span></div></div>'+
       '</div>'+
