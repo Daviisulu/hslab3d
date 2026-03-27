@@ -6106,4 +6106,573 @@ async function loadAllFromDB() {
 
 
 </body>
+<!-- ============================================================
+     HS LAB 3D — MODULO IA (Groq Free)
+     Incolla questo blocco PRIMA di </body> nel tuo index.html
+     ============================================================ -->
+
+<!-- STILI IA -->
+<style>
+/* Chatbot FAB + Panel */
+#ai-fab {
+  position:fixed; bottom:20px; right:20px; z-index:190;
+  width:52px; height:52px; border-radius:50%;
+  background:linear-gradient(135deg, #7c3aed, #38bdf8);
+  border:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 4px 20px rgba(124,58,237,.4);
+  transition:transform .2s, box-shadow .2s;
+}
+#ai-fab:hover { transform:scale(1.08); box-shadow:0 6px 28px rgba(124,58,237,.5); }
+#ai-fab svg { width:24px; height:24px; }
+#ai-fab .ai-badge { position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#34d399;border:2px solid var(--bg); }
+
+#ai-panel {
+  display:none; position:fixed; bottom:80px; right:20px; z-index:191;
+  width:400px; max-width:calc(100vw - 40px);
+  height:520px; max-height:calc(100vh - 120px);
+  background:var(--bg2); border:1px solid var(--border2);
+  border-radius:16px; overflow:hidden;
+  box-shadow:0 12px 48px rgba(0,0,0,.6);
+  flex-direction:column;
+}
+#ai-panel.open { display:flex; }
+#ai-panel-header {
+  padding:14px 16px; border-bottom:1px solid var(--border);
+  display:flex; justify-content:space-between; align-items:center;
+  background:var(--bg3);
+}
+#ai-panel-header .ai-title { font-size:14px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:8px; }
+#ai-panel-header .ai-dot { width:8px;height:8px;border-radius:50%;background:#34d399; }
+#ai-msgs {
+  flex:1; overflow-y:auto; padding:16px;
+  display:flex; flex-direction:column; gap:12px;
+}
+.ai-msg {
+  max-width:88%; padding:10px 14px;
+  border-radius:12px; font-size:13px;
+  line-height:1.6; word-break:break-word;
+}
+.ai-msg.user {
+  align-self:flex-end;
+  background:rgba(56,189,248,.15);
+  color:var(--text); border:1px solid rgba(56,189,248,.2);
+}
+.ai-msg.bot {
+  align-self:flex-start;
+  background:var(--bg3); color:var(--text);
+  border:1px solid var(--border);
+}
+.ai-msg.bot .ai-thinking { color:var(--text3); font-style:italic; }
+.ai-msg pre { background:var(--bg4);padding:8px 10px;border-radius:6px;font-family:var(--mono);font-size:11px;overflow-x:auto;margin:6px 0 0;white-space:pre-wrap; }
+#ai-input-wrap {
+  padding:12px; border-top:1px solid var(--border);
+  display:flex; gap:8px; align-items:end; background:var(--bg2);
+}
+#ai-input {
+  flex:1; background:var(--bg4); border:1px solid var(--border);
+  border-radius:10px; color:var(--text); font-family:var(--sans);
+  font-size:13px; padding:9px 12px; outline:none;
+  resize:none; max-height:100px; min-height:38px; line-height:1.5;
+}
+#ai-input:focus { border-color:var(--accent); }
+#ai-send-btn {
+  width:38px; height:38px; border-radius:10px;
+  background:var(--accent); border:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; transition:background .15s;
+}
+#ai-send-btn:hover { background:var(--accent-dark); }
+#ai-send-btn:disabled { opacity:.4; cursor:default; }
+#ai-send-btn svg { width:16px; height:16px; }
+.ai-chip-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.ai-chip {
+  padding:5px 11px; border-radius:20px;
+  border:1px solid var(--border2); background:transparent;
+  color:var(--text2); font-size:11px; cursor:pointer;
+  font-family:var(--sans); transition:all .12s;
+}
+.ai-chip:hover { border-color:var(--accent); color:var(--accent); }
+
+/* AI buttons inline nel preventivo */
+.ai-inline-btn {
+  padding:3px 9px; border-radius:6px; font-size:11px;
+  border:1px solid rgba(124,58,237,.3); background:rgba(124,58,237,.08);
+  color:#a78bfa; cursor:pointer; font-family:var(--sans);
+  transition:all .12s; white-space:nowrap;
+}
+.ai-inline-btn:hover { background:rgba(124,58,237,.15); border-color:rgba(124,58,237,.5); }
+.ai-inline-btn:disabled { opacity:.4; cursor:default; }
+.ai-inline-btn .ai-spin { display:inline-block; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+</style>
+
+<!-- CHATBOT FAB -->
+<button id="ai-fab" onclick="toggleAiPanel()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2a7 7 0 017 7c0 3-2 5.5-4 7l-3 4-3-4c-2-1.5-4-4-4-7a7 7 0 017-7z"/>
+    <circle cx="12" cy="9" r="1.5" fill="#fff" stroke="none"/>
+    <path d="M8.5 9a3.5 3.5 0 017 0" stroke-width="1.5"/>
+  </svg>
+  <span class="ai-badge"></span>
+</button>
+
+<!-- CHATBOT PANEL -->
+<div id="ai-panel">
+  <div id="ai-panel-header">
+    <div class="ai-title"><span class="ai-dot"></span> HS Lab 3D — Assistente IA</div>
+    <button onclick="toggleAiPanel()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:0;line-height:1">×</button>
+  </div>
+  <div id="ai-msgs">
+    <div class="ai-msg bot">
+      Ciao! Sono l'assistente IA di HS Lab 3D. Posso aiutarti con:
+      <div class="ai-chip-row">
+        <button class="ai-chip" onclick="aiAsk('Quale materiale mi consigli per un portachiavi da esterno?')">Consiglio materiale</button>
+        <button class="ai-chip" onclick="aiAsk('Quanto filamento serve per stampare 20 pezzi da 12g ciascuno?')">Calcolo filamento</button>
+        <button class="ai-chip" onclick="aiAsk('Come scelgo tra FDM e resina per miniature dettagliate?')">FDM vs Resina</button>
+        <button class="ai-chip" onclick="aiAsk('Quali impostazioni di stampa per PETG?')">Impostazioni stampa</button>
+      </div>
+    </div>
+  </div>
+  <div id="ai-input-wrap">
+    <textarea id="ai-input" rows="1" placeholder="Chiedi qualcosa…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();aiSend()}"></textarea>
+    <button id="ai-send-btn" onclick="aiSend()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#021728" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12,5 19,12 12,19"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- SCRIPT IA -->
+<script>
+// ============================================================
+// CONFIGURAZIONE GROQ
+// ============================================================
+// IMPORTANTE: Inserisci qui la tua API key gratuita di Groq
+// Registrati su https://console.groq.com (gratis, no carta di credito)
+// Poi vai su API Keys → Create API Key
+var GROQ_API_KEY = 'INSERISCI_QUI_LA_TUA_GROQ_API_KEY';
+var GROQ_MODEL = 'llama-3.3-70b-versatile';
+var GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+// ============================================================
+// CONTESTO DINAMICO — raccoglie dati dal gestionale
+// ============================================================
+function getHSLabContext() {
+  var ctx = 'Sei l\'assistente IA di HS Lab 3D, un laboratorio di stampa 3D in Sardegna (Italia). Rispondi SEMPRE in italiano, in modo conciso e pratico.\n\n';
+
+  // Filamenti disponibili
+  if (typeof filaments !== 'undefined' && filaments.length > 0) {
+    ctx += 'FILAMENTI DISPONIBILI IN MAGAZZINO:\n';
+    filaments.forEach(function(f) {
+      var pct = f.totalWeight > 0 ? Math.round(f.remaining / f.totalWeight * 100) : 0;
+      ctx += '- ' + f.type + ' ' + f.color + ' (' + f.brand + '): ' + f.remaining + 'g rimasti su ' + f.totalWeight + 'g (' + pct + '%), costo €' + f.costPerKg + '/kg\n';
+    });
+    ctx += '\n';
+  }
+
+  // Impostazioni costi
+  if (typeof settings !== 'undefined') {
+    ctx += 'IMPOSTAZIONI COSTI STAMPANTE:\n';
+    ctx += '- Costo filamento: €' + (settings.fdmCost || 20) + '/kg\n';
+    ctx += '- Costo resina: €' + (settings.resinCost || 45) + '/kg\n';
+    ctx += '- Spreco/supporti: ' + (settings.waste || 10) + '%\n';
+    ctx += '- Consumo FDM: ' + (settings.fdmW || 120) + 'W, Resina: ' + (settings.resinW || 60) + 'W\n';
+    ctx += '- Energia: €' + (settings.kwh || 0.25) + '/kWh\n';
+    ctx += '- Tariffa manodopera: €' + (settings.labor || 15) + '/h\n';
+    ctx += '- Markup: ' + (settings.markup || 30) + '%\n\n';
+  }
+
+  // Clienti
+  if (typeof clienti !== 'undefined' && clienti.length > 0) {
+    ctx += 'CLIENTI (' + clienti.length + ' totali): ';
+    ctx += clienti.slice(0, 10).map(function(c) {
+      return [c.nome, c.cognome].filter(Boolean).join(' ') + (c.azienda ? ' (' + c.azienda + ')' : '');
+    }).join(', ');
+    ctx += '\n\n';
+  }
+
+  // Preventivi recenti
+  if (typeof preventiviUfficiali !== 'undefined' && preventiviUfficiali.length > 0) {
+    ctx += 'ULTIMI 5 PREVENTIVI:\n';
+    preventiviUfficiali.slice(0, 5).forEach(function(p) {
+      ctx += '- ' + (p.descrizione || p.numero || '?') + ': €' + (p.totale || 0).toFixed(2) + ' (' + (p.stato || 'bozza') + ')\n';
+    });
+    ctx += '\n';
+  }
+
+  // Lavori in corso
+  if (typeof jobs !== 'undefined') {
+    var attivi = jobs.filter(function(j) { return j.status === 'in-progress'; });
+    if (attivi.length > 0) {
+      ctx += 'LAVORI IN CORSO: ' + attivi.map(function(j) { return j.name; }).join(', ') + '\n\n';
+    }
+  }
+
+  ctx += 'REGOLE:\n';
+  ctx += '- Rispondi in italiano, in modo breve e utile\n';
+  ctx += '- Usa i dati del magazzino quando l\'utente chiede consigli sui materiali\n';
+  ctx += '- Per consigli sui prezzi, usa le impostazioni di costo e il markup configurato\n';
+  ctx += '- Se non sai qualcosa di specifico sul lab, dillo\n';
+  ctx += '- Formatta con paragrafi brevi, usa ** per il grassetto quando serve\n';
+
+  return ctx;
+}
+
+// ============================================================
+// CHATBOT
+// ============================================================
+var aiHistory = [];
+var aiPanelOpen = false;
+
+function toggleAiPanel() {
+  aiPanelOpen = !aiPanelOpen;
+  document.getElementById('ai-panel').classList.toggle('open', aiPanelOpen);
+  if (aiPanelOpen) {
+    setTimeout(function() { document.getElementById('ai-input').focus(); }, 100);
+  }
+}
+
+function aiAsk(text) {
+  document.getElementById('ai-input').value = text;
+  aiSend();
+}
+
+function aiAddMsg(role, html) {
+  var msgs = document.getElementById('ai-msgs');
+  var div = document.createElement('div');
+  div.className = 'ai-msg ' + (role === 'user' ? 'user' : 'bot');
+  div.innerHTML = html;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+async function aiSend() {
+  var input = document.getElementById('ai-input');
+  var text = input.value.trim();
+  if (!text) return;
+
+  if (GROQ_API_KEY === 'INSERISCI_QUI_LA_TUA_GROQ_API_KEY') {
+    aiAddMsg('bot', '⚠️ Devi prima configurare la tua API key Groq.<br><br>1. Vai su <a href="https://console.groq.com" target="_blank" style="color:var(--accent)">console.groq.com</a> (gratis)<br>2. Crea un API Key<br>3. Aprì il file e cerca <code>GROQ_API_KEY</code><br>4. Sostituisci il placeholder con la tua chiave');
+    return;
+  }
+
+  input.value = '';
+  input.style.height = 'auto';
+  aiAddMsg('user', escHtml(text));
+
+  var thinkDiv = aiAddMsg('bot', '<span class="ai-thinking">Sto pensando…</span>');
+
+  aiHistory.push({ role: 'user', content: text });
+
+  // Limita la cronologia a 10 messaggi per non superare i limiti
+  var historyToSend = aiHistory.slice(-10);
+
+  try {
+    var resp = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + GROQ_API_KEY
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: getHSLabContext() }
+        ].concat(historyToSend),
+        temperature: 0.7,
+        max_tokens: 1024
+      })
+    });
+
+    if (!resp.ok) {
+      var errData = await resp.json().catch(function() { return {}; });
+      throw new Error(errData.error?.message || 'Errore ' + resp.status);
+    }
+
+    var data = await resp.json();
+    var reply = data.choices[0].message.content;
+
+    aiHistory.push({ role: 'assistant', content: reply });
+
+    // Formattazione semplice markdown → HTML
+    var html = escHtml(reply)
+      .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text)">$1</strong>')
+      .replace(/`([^`]+)`/g, '<code style="color:var(--accent);font-size:12px;font-family:var(--mono)">$1</code>')
+      .replace(/\n/g, '<br>');
+
+    thinkDiv.innerHTML = html;
+
+  } catch (err) {
+    thinkDiv.innerHTML = '<span style="color:var(--red)">Errore: ' + escHtml(err.message) + '</span>';
+  }
+
+  document.getElementById('ai-msgs').scrollTop = document.getElementById('ai-msgs').scrollHeight;
+  document.getElementById('ai-send-btn').disabled = false;
+}
+
+// Auto-resize textarea
+document.getElementById('ai-input').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+});
+
+// ============================================================
+// ASSISTENTE PREVENTIVI — bottoni IA inline
+// ============================================================
+
+// Genera descrizione per un oggetto nel calcolatore
+async function aiGeneraDescrizione(inputEl) {
+  var nome = inputEl.value.trim();
+  if (!nome) { toast('Scrivi prima il nome dell\'oggetto', 'info'); return; }
+
+  var btn = inputEl.parentElement.querySelector('.ai-inline-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="ai-spin">⟳</span>'; }
+
+  var tipo = typeof printType !== 'undefined' ? printType : 'fdm';
+  var bobina = '';
+  if (typeof selectedBobinaId !== 'undefined' && selectedBobinaId && typeof filaments !== 'undefined') {
+    var b = filaments.find(function(f) { return f.id === selectedBobinaId; });
+    if (b) bobina = b.type + ' ' + b.color + ' (' + b.brand + ')';
+  }
+
+  var prompt = 'Genera una descrizione commerciale BREVE (2-3 righe max) per un oggetto stampato in 3D:\n';
+  prompt += '- Nome: ' + nome + '\n';
+  prompt += '- Tecnologia: ' + (tipo === 'fdm' ? 'FDM (filamento)' : 'Resina SLA/MSLA') + '\n';
+  if (bobina) prompt += '- Materiale: ' + bobina + '\n';
+  prompt += 'Rispondi SOLO con la descrizione, senza prefissi o virgolette.';
+
+  try {
+    var result = await groqCall(prompt);
+    // Metti il risultato nel campo note del calcolatore
+    var noteField = document.getElementById('c_notes');
+    if (noteField) {
+      noteField.value = (noteField.value ? noteField.value + '\n\n' : '') + nome + ': ' + result;
+    }
+    toast('Descrizione generata per "' + nome + '"', 'success');
+  } catch (err) {
+    toast('Errore IA: ' + err.message, 'error');
+  }
+
+  if (btn) { btn.disabled = false; btn.innerHTML = '✦ IA'; }
+}
+
+// Suggerisci prezzo basato sullo storico
+async function aiSuggerisciPrezzo() {
+  var oggettiRows = document.querySelectorAll('#oggetti-rows .oggetto-row');
+  if (!oggettiRows.length) { toast('Aggiungi almeno un oggetto', 'info'); return; }
+
+  var oggetti = [];
+  oggettiRows.forEach(function(row) {
+    var inputs = row.querySelectorAll('input');
+    oggetti.push({
+      nome: inputs[0] ? inputs[0].value : '',
+      grammi: inputs[1] ? parseFloat(inputs[1].value) || 0 : 0,
+      ore: inputs[2] ? parseFloat(inputs[2].value) || 0 : 0
+    });
+  });
+
+  var prompt = 'Basandoti sui costi configurati (markup ' + (settings.markup || 30) + '%, manodopera €' + (settings.labor || 15) + '/h, filamento €' + (settings.fdmCost || 20) + '/kg), suggerisci un prezzo unitario per questi oggetti:\n';
+  oggetti.forEach(function(o) {
+    prompt += '- ' + o.nome + ': ' + o.grammi + 'g, ' + o.ore + ' ore di stampa\n';
+  });
+  prompt += '\nRispondi con il prezzo suggerito per ciascun oggetto e il totale. Formato breve.';
+
+  try {
+    var result = await groqCall(prompt);
+    toast('Suggerimento prezzo pronto — guarda il chatbot', 'success');
+    if (!aiPanelOpen) toggleAiPanel();
+    aiAddMsg('bot', result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>'));
+  } catch (err) {
+    toast('Errore IA: ' + err.message, 'error');
+  }
+}
+
+// Genera email per il preventivo
+async function aiGeneraEmail(prevId) {
+  if (typeof preventiviUfficiali === 'undefined') return;
+  var prev = preventiviUfficiali.find(function(p) { return p.id === prevId; });
+  if (!prev) { toast('Preventivo non trovato', 'error'); return; }
+
+  var cli = prev.clienteId ? clienti.find(function(c) { return c.id === prev.clienteId; }) : null;
+  var nomeCliente = cli ? [cli.nome, cli.cognome].filter(Boolean).join(' ') : 'il cliente';
+  var canale = cli ? cli.canale : '';
+
+  var prompt = 'Scrivi un messaggio ' + (canale === 'WhatsApp' || canale === 'Instagram' ? 'informale (per ' + canale + ')' : 'professionale (per email)') + ' per inviare un preventivo:\n';
+  prompt += '- Cliente: ' + nomeCliente + '\n';
+  prompt += '- Descrizione: ' + (prev.descrizione || prev.numero) + '\n';
+  prompt += '- Totale: €' + (prev.totale || 0).toFixed(2) + '\n';
+  if (prev.voci && prev.voci.length) {
+    prompt += '- Voci: ' + prev.voci.map(function(v) { return v.descrizione; }).join(', ') + '\n';
+  }
+  prompt += 'Firmati come HS Lab 3D. Messaggio breve e diretto.';
+
+  try {
+    var result = await groqCall(prompt);
+    if (!aiPanelOpen) toggleAiPanel();
+    aiAddMsg('bot', '<strong>Email per ' + escHtml(nomeCliente) + ':</strong><br><br>' + escHtml(result).replace(/\n/g, '<br>'));
+    toast('Email generata — copia dal chatbot', 'success');
+  } catch (err) {
+    toast('Errore IA: ' + err.message, 'error');
+  }
+}
+
+// ============================================================
+// GROQ API CALL (riusabile)
+// ============================================================
+async function groqCall(userPrompt) {
+  if (GROQ_API_KEY === 'INSERISCI_QUI_LA_TUA_GROQ_API_KEY') {
+    throw new Error('API Key Groq non configurata');
+  }
+
+  var resp = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + GROQ_API_KEY
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: getHSLabContext() },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.6,
+      max_tokens: 600
+    })
+  });
+
+  if (!resp.ok) {
+    var errData = await resp.json().catch(function() { return {}; });
+    throw new Error(errData.error?.message || 'Errore HTTP ' + resp.status);
+  }
+
+  var data = await resp.json();
+  return data.choices[0].message.content;
+}
+
+// ============================================================
+// INIETTA BOTTONI IA nell'interfaccia esistente
+// ============================================================
+function injectAiButtons() {
+  // 1. Bottone "✦ IA Suggerisci prezzo" nel pannello laterale del calcolatore
+  var calcPanel = document.querySelector('#live-breakdown');
+  if (calcPanel && !document.getElementById('ai-prezzo-btn')) {
+    var wrapper = calcPanel.parentElement;
+    var btnDiv = document.createElement('div');
+    btnDiv.style.cssText = 'padding:0 1.25rem .875rem;';
+    btnDiv.innerHTML = '<button class="ai-inline-btn" id="ai-prezzo-btn" onclick="aiSuggerisciPrezzo()" style="width:100%;padding:7px;text-align:center;font-size:12px">✦ IA — Suggerisci prezzo</button>';
+    wrapper.insertBefore(btnDiv, wrapper.querySelector('[style*="border-top"]'));
+  }
+
+  // 2. Bottone "✦ Genera email" nell'header preventivi
+  // Questo viene aggiunto dinamicamente quando si apre un preventivo
+
+  // 3. Bottone "✦ IA Descrivi" accanto al campo note del calcolatore
+  var notesCard = document.getElementById('c_notes');
+  if (notesCard && !document.getElementById('ai-desc-btn')) {
+    var cardTitle = notesCard.parentElement.querySelector('.card-title');
+    if (cardTitle) {
+      var descBtn = document.createElement('button');
+      descBtn.className = 'ai-inline-btn';
+      descBtn.id = 'ai-desc-btn';
+      descBtn.textContent = '✦ Genera descrizione IA';
+      descBtn.style.cssText = 'float:right;margin-top:-2px';
+      descBtn.onclick = function() {
+        var firstObj = document.querySelector('#oggetti-rows .oggetto-row input');
+        if (firstObj) aiGeneraDescrizione(firstObj);
+        else toast('Aggiungi un oggetto prima', 'info');
+      };
+      cardTitle.appendChild(descBtn);
+    }
+  }
+}
+
+// Inietta i bottoni dopo che la pagina è pronta
+if (document.readyState === 'complete') {
+  setTimeout(injectAiButtons, 500);
+} else {
+  window.addEventListener('load', function() { setTimeout(injectAiButtons, 500); });
+}
+
+// Re-inietta quando si cambia pagina
+var origShowPage = typeof showPage === 'function' ? showPage : null;
+if (origShowPage) {
+  showPage = function(page, el) {
+    origShowPage(page, el);
+    setTimeout(injectAiButtons, 100);
+  };
+}
+
+// ============================================================
+// SETUP IA NELLE IMPOSTAZIONI
+// ============================================================
+function injectAiSettings() {
+  var intTab = document.getElementById('stab-integrazioni');
+  if (!intTab || document.getElementById('ai-settings-card')) return;
+
+  var card = document.createElement('div');
+  card.className = 'card';
+  card.id = 'ai-settings-card';
+  card.style.marginBottom = '12px';
+  card.innerHTML = '<div class="card-title">Assistente IA — Groq (gratuito)</div>' +
+    '<p style="font-size:13px;color:var(--text2);margin-bottom:.875rem;line-height:1.6">' +
+    'Configura la tua API key gratuita di <strong style="color:var(--text)">Groq</strong> per abilitare il chatbot IA e l\'assistente preventivi.' +
+    '</p>' +
+    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">' +
+    '<input type="password" id="groq-key-input" placeholder="gsk_..." style="flex:1;font-size:13px;font-family:var(--mono)" value="' + (GROQ_API_KEY !== 'INSERISCI_QUI_LA_TUA_GROQ_API_KEY' ? GROQ_API_KEY : '') + '" oninput="saveGroqKey()">' +
+    '<button class="btn" onclick="testGroqKey()" style="font-size:12px">Testa</button>' +
+    '</div>' +
+    '<div id="groq-key-status" style="font-size:12px;margin-bottom:.75rem"></div>' +
+    '<div style="font-size:12px;color:var(--text3);line-height:1.6">' +
+    '1. Vai su <a href="https://console.groq.com" target="_blank" style="color:var(--accent)">console.groq.com</a> (gratis, no carta di credito)<br>' +
+    '2. Crea un account → API Keys → Create API Key<br>' +
+    '3. Incolla la chiave qui sopra' +
+    '</div>';
+
+  intTab.insertBefore(card, intTab.firstChild);
+}
+
+function saveGroqKey() {
+  var key = document.getElementById('groq-key-input').value.trim();
+  if (key) {
+    GROQ_API_KEY = key;
+    try { localStorage.setItem('hslab_groq_key', key); } catch(e) {}
+  }
+}
+
+async function testGroqKey() {
+  var status = document.getElementById('groq-key-status');
+  status.innerHTML = '<span style="color:var(--text2)">Test in corso…</span>';
+
+  try {
+    var result = await groqCall('Rispondi solo con: OK funziona');
+    status.innerHTML = '<span style="color:var(--green)">✓ Connessione riuscita — IA attiva!</span>';
+  } catch (err) {
+    status.innerHTML = '<span style="color:var(--red)">✗ Errore: ' + escHtml(err.message) + '</span>';
+  }
+}
+
+// Carica la chiave salvata
+try {
+  var savedKey = localStorage.getItem('hslab_groq_key');
+  if (savedKey) GROQ_API_KEY = savedKey;
+} catch(e) {}
+
+// Inietta settings IA
+if (document.readyState === 'complete') {
+  setTimeout(injectAiSettings, 600);
+} else {
+  window.addEventListener('load', function() { setTimeout(injectAiSettings, 600); });
+}
+
+// Toast helper (usa quella esistente se disponibile)
+function toast(msg, type) {
+  if (typeof showToast === 'function') {
+    showToast(msg, type || 'info');
+  } else {
+    console.log('[IA]', msg);
+  }
+}
+</script>
 </html>
