@@ -1048,91 +1048,339 @@ select { cursor: pointer; }
 <!-- ============================================================
      LOGIN SCREEN
      ============================================================ -->
-<div id="login-screen" style="
+<style>
+/* ========== AUTH SCREEN ========== */
+#login-screen {
   position:fixed;inset:0;
   background:#0a0e17;
   display:flex;align-items:center;justify-content:center;
   z-index:9999;
   font-family:'Plus Jakarta Sans',sans-serif;
-">
-  <div style="width:100%;max-width:380px;padding:0 1.5rem;">
+  overflow-y:auto;
+  padding:1.5rem 0;
+}
+.auth-wrap {
+  width:100%;max-width:400px;padding:0 1.5rem;
+}
+.auth-logo {
+  text-align:center;margin-bottom:2rem;
+}
+.auth-logo-icon {
+  width:54px;height:54px;border-radius:15px;
+  background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.25);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 12px;
+  box-shadow:0 0 30px rgba(56,189,248,.1);
+}
+.auth-brand {
+  font-family:'IBM Plex Mono',monospace;font-size:10px;
+  color:#38bdf8;letter-spacing:.16em;text-transform:uppercase;
+  margin-bottom:4px;
+}
+.auth-title {
+  font-size:23px;font-weight:700;color:#eef2ff;
+  letter-spacing:-.03em;line-height:1.2;
+}
+.auth-subtitle {
+  font-size:13px;color:#6b86a8;margin-top:4px;
+}
+
+/* Tab switch */
+.auth-tabs {
+  display:flex;background:#0f1520;
+  border:1px solid #1e2d42;border-radius:10px;
+  padding:4px;margin-bottom:1.25rem;gap:4px;
+}
+.auth-tab {
+  flex:1;padding:8px;border:none;border-radius:7px;
+  background:transparent;color:#6b86a8;
+  font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:13px;font-weight:500;cursor:pointer;
+  transition:all .2s;
+}
+.auth-tab.active {
+  background:#1a2438;color:#eef2ff;
+  box-shadow:0 1px 6px rgba(0,0,0,.4);
+}
+
+/* Card */
+.auth-card {
+  background:#0f1520;
+  border:1px solid #1e2d42;
+  border-radius:16px;
+  padding:1.75rem;
+  transition:border-color .2s;
+}
+.auth-card:focus-within { border-color:#243450; }
+
+/* Fields */
+.auth-field { margin-bottom:1rem; }
+.auth-field label {
+  display:block;font-size:11px;color:#9ab1d4;
+  font-family:'IBM Plex Mono',monospace;
+  margin-bottom:6px;letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.auth-input-wrap { position:relative; }
+.auth-input {
+  width:100%;background:#1a2438;
+  border:1px solid #1e2d42;border-radius:8px;
+  color:#eef2ff;font-size:14px;
+  padding:10px 12px 10px 38px;outline:none;
+  font-family:'Plus Jakarta Sans',sans-serif;
+  transition:border-color .15s,box-shadow .15s;
+}
+.auth-input:focus {
+  border-color:#38bdf8;
+  box-shadow:0 0 0 3px rgba(56,189,248,.08);
+}
+.auth-input-icon {
+  position:absolute;left:11px;top:50%;transform:translateY(-50%);
+  width:16px;height:16px;color:#3a526b;pointer-events:none;
+}
+.auth-input-toggle {
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;color:#3a526b;padding:2px;
+  transition:color .15s;
+}
+.auth-input-toggle:hover { color:#9ab1d4; }
+
+/* Messages */
+.auth-msg {
+  border-radius:8px;font-size:13px;
+  padding:9px 12px;margin-bottom:1rem;
+  text-align:center;display:none;line-height:1.5;
+}
+.auth-msg.error { background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);color:#f87171; }
+.auth-msg.success { background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.25);color:#34d399; }
+.auth-msg.info { background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.2);color:#38bdf8; }
+
+/* Button */
+.auth-btn {
+  width:100%;background:#38bdf8;border:none;
+  border-radius:8px;color:#021728;
+  font-size:14px;font-weight:600;
+  padding:11px;cursor:pointer;
+  font-family:'Plus Jakarta Sans',sans-serif;
+  transition:background .15s,transform .1s,box-shadow .15s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-top:1.25rem;
+  box-shadow:0 2px 12px rgba(56,189,248,.2);
+}
+.auth-btn:hover { background:#0ea5e9; box-shadow:0 4px 20px rgba(56,189,248,.3); }
+.auth-btn:active { transform:scale(.98); }
+.auth-btn:disabled { opacity:.5;cursor:not-allowed;transform:none; }
+.auth-btn-spinner {
+  width:16px;height:16px;border:2px solid rgba(2,23,40,.3);
+  border-top-color:#021728;border-radius:50%;
+  animation:spin .7s linear infinite;display:none;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* Divider */
+.auth-divider {
+  display:flex;align-items:center;gap:10px;
+  margin:1.25rem 0;color:#243450;font-size:12px;
+}
+.auth-divider::before,.auth-divider::after {
+  content:'';flex:1;height:1px;background:#1e2d42;
+}
+
+/* Password strength */
+.pw-strength {
+  margin-top:6px;display:none;
+}
+.pw-strength-bar {
+  height:3px;border-radius:2px;background:#1a2438;overflow:hidden;margin-bottom:4px;
+}
+.pw-strength-fill {
+  height:100%;border-radius:2px;transition:width .3s,background .3s;
+}
+.pw-strength-label { font-size:11px;font-family:'IBM Plex Mono',monospace;color:#6b86a8; }
+
+/* Footer note */
+.auth-note {
+  text-align:center;margin-top:1.25rem;
+  font-size:12px;color:#3a526b;line-height:1.7;
+}
+.auth-note a {
+  color:#38bdf8;text-decoration:none;cursor:pointer;
+  transition:color .15s;
+}
+.auth-note a:hover { color:#7dd3fc; }
+
+/* Password reset panel */
+#auth-reset-panel { display:none; }
+</style>
+
+<div id="login-screen">
+  <div class="auth-wrap">
 
     <!-- Logo -->
-    <div style="text-align:center;margin-bottom:2rem;">
-      <div style="
-        width:52px;height:52px;border-radius:14px;
-        background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.25);
-        display:flex;align-items:center;justify-content:center;
-        margin:0 auto 12px;
-      ">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.5">
           <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
           <polyline points="3.27,6.96 12,12.01 20.73,6.96"/>
           <line x1="12" y1="22.08" x2="12" y2="12"/>
         </svg>
       </div>
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#38bdf8;letter-spacing:.14em;text-transform:uppercase;">HS Lab 3D</div>
-      <div style="font-size:22px;font-weight:700;color:#eef2ff;margin-top:6px;letter-spacing:-.03em;">Gestionale</div>
+      <div class="auth-brand">HS Lab 3D</div>
+      <div class="auth-title">Gestionale</div>
+      <div class="auth-subtitle">Accedi al tuo account</div>
     </div>
 
-    <!-- Card login -->
-    <div style="
-      background:#0f1520;
-      border:1px solid #1e2d42;
-      border-radius:16px;
-      padding:1.75rem;
-    ">
-      <div style="margin-bottom:1rem;">
-        <label style="display:block;font-size:12px;color:#9ab1d4;font-family:'IBM Plex Mono',monospace;margin-bottom:6px;letter-spacing:.04em;">UTENTE</label>
-        <select id="login-user" style="
-          width:100%;background:#1a2438;border:1px solid #1e2d42;
-          border-radius:8px;color:#eef2ff;font-size:14px;
-          padding:9px 12px;outline:none;cursor:pointer;
-          font-family:'Plus Jakarta Sans',sans-serif;
-        ">
-          <option value="">— seleziona utente —</option>
-          <option value="user1">👤 Daviisulu</option>
-          <option value="user2">👤 Enrico</option>
-        </select>
-      </div>
-
-      <div style="margin-bottom:1.25rem;">
-        <label style="display:block;font-size:12px;color:#9ab1d4;font-family:'IBM Plex Mono',monospace;margin-bottom:6px;letter-spacing:.04em;">PASSWORD</label>
-        <input type="password" id="login-password" placeholder="••••••••" style="
-          width:100%;background:#1a2438;border:1px solid #1e2d42;
-          border-radius:8px;color:#eef2ff;font-size:14px;
-          padding:9px 12px;outline:none;
-          font-family:'Plus Jakarta Sans',sans-serif;
-          transition:border-color .15s;
-        " onfocus="this.style.borderColor='#38bdf8'" onblur="this.style.borderColor='#1e2d42'"
-           onkeydown="if(event.key==='Enter') doLogin()">
-      </div>
-
-      <div id="login-error" style="
-        display:none;
-        background:rgba(248,113,113,.08);
-        border:1px solid rgba(248,113,113,.25);
-        border-radius:8px;
-        color:#f87171;font-size:13px;
-        padding:9px 12px;margin-bottom:1rem;
-        text-align:center;
-      "></div>
-
-      <button onclick="doLogin()" style="
-        width:100%;background:#38bdf8;border:none;
-        border-radius:8px;color:#021728;
-        font-size:14px;font-weight:600;
-        padding:11px;cursor:pointer;
-        font-family:'Plus Jakarta Sans',sans-serif;
-        transition:background .15s;
-      " onmouseover="this.style.background='#0ea5e9'" onmouseout="this.style.background='#38bdf8'">
-        Accedi
-      </button>
+    <!-- Tab switch Login / Registrati -->
+    <div class="auth-tabs" id="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="authShowTab('login')">Accedi</button>
+      <button class="auth-tab" id="tab-register" onclick="authShowTab('register')">Registrati</button>
     </div>
 
-    <div style="text-align:center;margin-top:1.25rem;font-size:12px;color:#3a526b;">
+    <!-- ===== PANNELLO LOGIN ===== -->
+    <div id="auth-login-panel">
+      <div class="auth-card">
+        <div class="auth-field">
+          <label>Email</label>
+          <div class="auth-input-wrap">
+            <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 7L2 7"/>
+            </svg>
+            <input type="text" id="login-email" class="auth-input" placeholder="nome@esempio.it"
+              autocomplete="email" onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
+          </div>
+        </div>
+
+        <div class="auth-field" style="margin-bottom:0">
+          <label>Password</label>
+          <div class="auth-input-wrap">
+            <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+            </svg>
+            <input type="password" id="login-password" class="auth-input" placeholder="••••••••"
+              autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+            <button type="button" class="auth-input-toggle" onclick="authTogglePw('login-password',this)" title="Mostra/nascondi">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div style="text-align:right;margin-top:6px">
+          <a style="font-size:12px;color:#38bdf8;cursor:pointer;text-decoration:none" onclick="authShowTab('reset')">Password dimenticata?</a>
+        </div>
+
+        <div id="login-error" class="auth-msg error"></div>
+
+        <button id="login-btn" class="auth-btn" onclick="doLogin()">
+          <div class="auth-btn-spinner" id="login-spinner"></div>
+          Accedi
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== PANNELLO REGISTRAZIONE ===== -->
+    <div id="auth-register-panel" style="display:none">
+      <div class="auth-card">
+        <div class="auth-field">
+          <label>Nome completo</label>
+          <div class="auth-input-wrap">
+            <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            <input type="text" id="reg-nome" class="auth-input" placeholder="Mario Rossi"
+              autocomplete="name" onkeydown="if(event.key==='Enter')document.getElementById('reg-email').focus()">
+          </div>
+        </div>
+
+        <div class="auth-field">
+          <label>Email</label>
+          <div class="auth-input-wrap">
+            <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 7L2 7"/>
+            </svg>
+            <input type="text" id="reg-email" class="auth-input" placeholder="nome@esempio.it"
+              autocomplete="email" onkeydown="if(event.key==='Enter')document.getElementById('reg-password').focus()">
+          </div>
+        </div>
+
+        <div class="auth-field">
+          <label>Password</label>
+          <div class="auth-input-wrap">
+            <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+            </svg>
+            <input type="password" id="reg-password" class="auth-input" placeholder="Min. 8 caratteri"
+              autocomplete="new-password" oninput="authCheckPwStrength(this.value)"
+              onkeydown="if(event.key==='Enter')document.getElementById('reg-password2').focus()">
+            <button type="button" class="auth-input-toggle" onclick="authTogglePw('reg-password',this)" title="Mostra/nascondi">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          <div class="pw-strength" id="pw-strength">
+            <div class="pw-strength-bar"><div class="pw-strength-fill" id="pw-fill"></div></div>
+            <div class="pw-strength-label" id="pw-label"></div>
+          </div>
+        </div>
+
+        <div class="auth-field" style="margin-bottom:0">
+          <label>Conferma password</label>
+          <div class="auth-input-wrap">
+            <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+            </svg>
+            <input type="password" id="reg-password2" class="auth-input" placeholder="Ripeti la password"
+              autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
+            <button type="button" class="auth-input-toggle" onclick="authTogglePw('reg-password2',this)" title="Mostra/nascondi">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="register-msg" class="auth-msg"></div>
+
+        <button id="register-btn" class="auth-btn" onclick="doRegister()">
+          <div class="auth-btn-spinner" id="register-spinner"></div>
+          Crea account
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== PANNELLO RESET PASSWORD ===== -->
+    <div id="auth-reset-panel">
+      <div class="auth-card">
+        <p style="font-size:13px;color:#9ab1d4;margin-bottom:1.25rem;line-height:1.6">
+          Inserisci la tua email e ti manderemo un link per reimpostare la password.
+        </p>
+        <div class="auth-field" style="margin-bottom:0">
+          <label>Email</label>
+          <div class="auth-input-wrap">
+            <svg class="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 7L2 7"/>
+            </svg>
+            <input type="text" id="reset-email" class="auth-input" placeholder="nome@esempio.it"
+              autocomplete="email" onkeydown="if(event.key==='Enter')doPasswordReset()">
+          </div>
+        </div>
+
+        <div id="reset-msg" class="auth-msg"></div>
+
+        <button id="reset-btn" class="auth-btn" onclick="doPasswordReset()">
+          <div class="auth-btn-spinner" id="reset-spinner"></div>
+          Invia link reset
+        </button>
+      </div>
+    </div>
+
+    <!-- Note footer -->
+    <div class="auth-note" id="auth-footer-note">
       Accesso riservato · HS Lab 3D
     </div>
+
   </div>
 </div>
 
@@ -2283,48 +2531,188 @@ async function dbSaveImpostazioni(settings, extras, scriptUrl, fattScriptUrl) {
 }
 
 // ============================================================
-// LOGIN con Supabase
+// AUTH — Login / Registrazione / Reset password via Supabase
 // ============================================================
-var USERS = {
-  user1: { nome: 'Daviisulu', password: 'hslab2024' },
-  user2: { nome: 'Enrico', password: 'hslab2024' }
-};
 
+// ---- Tab switcher ----
+function authShowTab(tab) {
+  var panels = { login: 'auth-login-panel', register: 'auth-register-panel', reset: 'auth-reset-panel' };
+  var tabs   = document.getElementById('auth-tabs');
+  Object.keys(panels).forEach(function(k) {
+    var panel = document.getElementById(panels[k]);
+    if (panel) panel.style.display = (k === tab) ? 'block' : 'none';
+  });
+  // Tab bar visibile solo per login/register
+  if (tabs) tabs.style.display = (tab === 'reset') ? 'none' : 'flex';
+  // Note footer
+  var note = document.getElementById('auth-footer-note');
+  if (note) {
+    if (tab === 'reset') {
+      note.innerHTML = '<a onclick="authShowTab(\'login\')">← Torna all\'accesso</a>';
+    } else {
+      note.innerHTML = 'Accesso riservato · HS Lab 3D';
+    }
+  }
+  // Active tab button
+  ['login','register'].forEach(function(t) {
+    var btn = document.getElementById('tab-' + t);
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+  // Svuota messaggi
+  ['login-error','register-msg','reset-msg'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) { el.style.display = 'none'; el.textContent = ''; }
+  });
+}
+
+// ---- Mostra/nascondi password ----
+function authTogglePw(inputId, btn) {
+  var inp = document.getElementById(inputId);
+  if (!inp) return;
+  var show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  btn.innerHTML = show
+    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+}
+
+// ---- Forza password ----
+function authCheckPwStrength(pw) {
+  var wrap = document.getElementById('pw-strength');
+  var fill = document.getElementById('pw-fill');
+  var label = document.getElementById('pw-label');
+  if (!wrap) return;
+  if (!pw) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  var score = 0;
+  if (pw.length >= 8) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  var levels = [
+    { pct: '25%', color: '#f87171', text: 'Debole' },
+    { pct: '50%', color: '#fbbf24', text: 'Discreta' },
+    { pct: '75%', color: '#38bdf8', text: 'Buona' },
+    { pct: '100%', color: '#34d399', text: 'Ottima' }
+  ];
+  var lv = levels[Math.max(0, score - 1)];
+  fill.style.width = lv.pct;
+  fill.style.background = lv.color;
+  label.textContent = lv.text;
+  label.style.color = lv.color;
+}
+
+// ---- Helper UI per bottoni ----
+function authSetLoading(btnId, spinnerId, loading) {
+  var btn = document.getElementById(btnId);
+  var sp  = document.getElementById(spinnerId);
+  if (!btn) return;
+  btn.disabled = loading;
+  if (sp) sp.style.display = loading ? 'block' : 'none';
+}
+function authShowMsg(elId, text, type) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'auth-msg ' + (type || 'error');
+  el.style.display = 'block';
+}
+
+// ---- LOGIN ----
 async function doLogin() {
-  var userId = document.getElementById('login-user').value;
-  var password = document.getElementById('login-password').value;
-  var errEl = document.getElementById('login-error');
-  errEl.style.display = 'none';
+  var email    = (document.getElementById('login-email').value || '').trim();
+  var password = (document.getElementById('login-password').value || '');
+  document.getElementById('login-error').style.display = 'none';
 
-  if (!userId) { errEl.textContent = 'Seleziona un utente.'; errEl.style.display = 'block'; return; }
-  if (!password) { errEl.textContent = 'Inserisci la password.'; errEl.style.display = 'block'; return; }
+  if (!email)    { authShowMsg('login-error', 'Inserisci la tua email.', 'error'); return; }
+  if (!password) { authShowMsg('login-error', 'Inserisci la password.', 'error'); return; }
 
-  // Mappa utente → email Supabase
-  var emailMap = {
-    user1: 'daviisulu@gmail.com',
-    user2: 'enrico@hslab3d.it'  // aggiorna con l'email reale di Enrico
-  };
-
+  authSetLoading('login-btn', 'login-spinner', true);
   try {
-    var email = emailMap[userId];
-    await sbLogin(email, password);
-    var nomeUtente = USERS[userId].nome;
+    var user = await sbLogin(email, password);
+    var nome = user.user_metadata?.full_name || user.email.split('@')[0];
     document.getElementById('login-screen').style.display = 'none';
-    showCurrentUser(nomeUtente);
+    showCurrentUser(nome);
     await loadAllFromDB();
     showPage('dashboard', document.querySelector('.nav-item.active'));
   } catch(e) {
-    errEl.textContent = 'Email o password errati. Riprova.';
-    errEl.style.display = 'block';
+    authShowMsg('login-error', 'Email o password errati. Riprova.', 'error');
     document.getElementById('login-password').value = '';
+  } finally {
+    authSetLoading('login-btn', 'login-spinner', false);
   }
 }
 
+// ---- REGISTRAZIONE ----
+async function doRegister() {
+  var nome  = (document.getElementById('reg-nome').value || '').trim();
+  var email = (document.getElementById('reg-email').value || '').trim();
+  var pw1   = document.getElementById('reg-password').value;
+  var pw2   = document.getElementById('reg-password2').value;
+  document.getElementById('register-msg').style.display = 'none';
+
+  if (!nome)  { authShowMsg('register-msg', 'Inserisci il tuo nome.', 'error'); return; }
+  if (!email) { authShowMsg('register-msg', 'Inserisci una email valida.', 'error'); return; }
+  if (pw1.length < 8) { authShowMsg('register-msg', 'La password deve avere almeno 8 caratteri.', 'error'); return; }
+  if (pw1 !== pw2)    { authShowMsg('register-msg', 'Le password non coincidono.', 'error'); return; }
+
+  authSetLoading('register-btn', 'register-spinner', true);
+  try {
+    var { data, error } = await sb.auth.signUp({
+      email: email,
+      password: pw1,
+      options: { data: { full_name: nome } }
+    });
+    if (error) throw error;
+    // Supabase può richiedere conferma email
+    if (data.user && !data.session) {
+      authShowMsg('register-msg', '✓ Account creato! Controlla la tua email per confermare la registrazione.', 'success');
+    } else if (data.session) {
+      // Auto-login riuscito (email confirmation disabilitata nel progetto)
+      document.getElementById('login-screen').style.display = 'none';
+      showCurrentUser(nome);
+      await loadAllFromDB();
+      showPage('dashboard', document.querySelector('.nav-item.active'));
+    }
+  } catch(e) {
+    var msg = e.message || 'Errore durante la registrazione.';
+    if (msg.includes('already registered') || msg.includes('already exists')) {
+      msg = 'Questa email è già registrata. Prova ad accedere.';
+    }
+    authShowMsg('register-msg', msg, 'error');
+  } finally {
+    authSetLoading('register-btn', 'register-spinner', false);
+  }
+}
+
+// ---- RESET PASSWORD ----
+async function doPasswordReset() {
+  var email = (document.getElementById('reset-email').value || '').trim();
+  document.getElementById('reset-msg').style.display = 'none';
+
+  if (!email) { authShowMsg('reset-msg', 'Inserisci la tua email.', 'error'); return; }
+
+  authSetLoading('reset-btn', 'reset-spinner', true);
+  try {
+    var { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.href
+    });
+    if (error) throw error;
+    authShowMsg('reset-msg', '✓ Email inviata! Controlla la tua casella di posta.', 'success');
+    document.getElementById('reset-email').value = '';
+  } catch(e) {
+    authShowMsg('reset-msg', e.message || 'Errore nell\'invio della email.', 'error');
+  } finally {
+    authSetLoading('reset-btn', 'reset-spinner', false);
+  }
+}
+
+// ---- CHECK SESSIONE ATTIVA ----
 async function checkLogin() {
   initSupabase();
   var user = await sbGetUser();
   if (user) {
-    var nome = user.email.includes('daviisulu') ? 'Daviisulu' : 'Enrico';
+    var nome = user.user_metadata?.full_name || user.email.split('@')[0];
     document.getElementById('login-screen').style.display = 'none';
     showCurrentUser(nome);
     return true;
@@ -5683,15 +6071,17 @@ async function loadAllFromDB() {
 
 // ---- BOOTSTRAP ----
 (async function() {
-  initSupabase();
   var loggedIn = await checkLogin();
   if (loggedIn) {
     await loadAllFromDB();
     init();
   } else {
-    document.getElementById('login-user').addEventListener('change', function() {
-      if (this.value) setTimeout(function(){ document.getElementById('login-password').focus(); }, 50);
-    });
+    // Autofocus sul campo email al caricamento
+    setTimeout(function() {
+      var emailInput = document.getElementById('login-email');
+      if (emailInput) emailInput.focus();
+    }, 100);
+
   }
 })();
 </script>
