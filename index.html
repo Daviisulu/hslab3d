@@ -6747,10 +6747,12 @@ async function loadAllFromDB() {
 <!-- SCRIPT 3MF IMPORT -->
 <script>
 // ============================================================
-// IMPORTAZIONE FILE .3MF (BAMBU STUDIO)
+// IMPORTAZIONE FILE .3MF (BAMBU STUDIO + GENERICI)
 // ============================================================
-// Il file .3mf è un archivio ZIP contenente XML con metadati
-// di slicing: peso, tempo, filamenti, colori, multicolore (AMS)
+// Supporta:
+// A) File .3mf slicati da Bambu Studio (con dati peso/tempo in metadata)
+// B) File .3mf generici (MakeWorld, Thingiverse, Printables) — calcola
+//    il volume dalla mesh triangolare e stima peso/materiale/colori
 
 function handle3mfFile(inputEl) {
   var file = inputEl.files && inputEl.files[0];
@@ -6800,109 +6802,477 @@ async function extract3mfData(zip, fileName) {
     totalWeight: 0,
     totalTime: 0,
     isMulticolor: false,
-    colorCount: 0
+    colorCount: 0,
+    source: 'unknown', // 'bambu_sliced', 'generic_3mf'
+    estimatedFromMesh: false
   };
 
-  // --- 1. Leggi Metadata/slice_info.config (Bambu Studio) ---
-  var sliceInfo = null;
-  var sliceFiles = ['Metadata/slice_info.config', 'Metadata/project_settings.config'];
-  for (var si = 0; si < sliceFiles.length; si++) {
-    var sf = zip.file(sliceFiles[si]);
-    if (sf) { sliceInfo = await sf.async('string'); break; }
-  }
-
-  // --- 2. Leggi Metadata/plate_X.gcode metadata o model settings ---
-  var plateFiles = [];
-  zip.forEach(function(path, entry) {
-    if (path.match(/Metadata\/plate_\d+/i) || path.match(/Metadata\/slice_info/i)) {
-      plateFiles.push(path);
-    }
-  });
-
-  // --- 3. Prova a leggere il 3D model file per i filamenti ---
-  var modelXml = null;
-  var modelFile = zip.file('3D/3dmodel.model');
-  if (modelFile) {
-    modelXml = await modelFile.async('string');
-  }
-
-  // --- 4. Leggi il config principale di Bambu Studio ---
-  var configFile = zip.file('Metadata/model_settings.config');
-  var configXml = configFile ? await configFile.async('string') : null;
-
-  // --- 5. Leggi plate list da slice_info ---
-  var plates = [];
+  // ====== FASE 1: Cerca dati di slicing Bambu Studio ======
+  var hasSliceData = false;
   var filamentMap = {};
 
-  if (sliceInfo) {
-    plates = parseSliceInfo(sliceInfo, filamentMap);
+  // 1a. slice_info.config
+  var sliceInfoFile = zip.file('Metadata/slice_info.config');
+  if (sliceInfoFile) {
+    var sliceXml = await sliceInfoFile.async('string');
+    var plates = parseSliceInfo(sliceXml, filamentMap);
+    if (plates.length && plates.some(function(p){return p.weight > 0 || p.time > 0;})) {
+      result.plates = plates;
+      hasSliceData = true;
+      result.source = 'bambu_sliced';
+    }
   }
 
-  // --- 6. Se non trovato slice_info, cerca nei .gcode files ---
-  if (!plates.length) {
+  // 1b. Cerca .gcode embedded (Bambu salva gcode dentro il 3mf)
+  if (!hasSliceData) {
     var gcodeEntries = [];
     zip.forEach(function(path, entry) {
-      if (path.match(/\.gcode$/i)) {
-        gcodeEntries.push({path: path, entry: entry});
-      }
+      if (path.match(/\.gcode$/i)) gcodeEntries.push({path:path, entry:entry});
     });
     for (var gi = 0; gi < gcodeEntries.length; gi++) {
       try {
         var gcText = await gcodeEntries[gi].entry.async('string');
         var gcodePlate = parseGcodeMetadata(gcText, gcodeEntries[gi].path);
-        if (gcodePlate) plates.push(gcodePlate);
+        if (gcodePlate && (gcodePlate.weight > 0 || gcodePlate.time > 0)) {
+          result.plates.push(gcodePlate);
+          hasSliceData = true;
+          result.source = 'bambu_sliced';
+        }
         parseGcodeFilaments(gcText, filamentMap);
       } catch(e) { /* skip */ }
     }
   }
 
-  // --- 7. Cerca filamenti nel project_settings.config ---
-  var projSettings = zip.file('Metadata/project_settings.config');
-  if (projSettings) {
+  // 1c. project_settings.config (JSON in Bambu Studio)
+  var projFile = zip.file('Metadata/project_settings.config');
+  if (projFile) {
     try {
-      var projXml = await projSettings.async('string');
-      parseProjectFilaments(projXml, filamentMap);
-    } catch(e) { /* skip */ }
+      var projContent = await projFile.async('string');
+      parseProjectFilaments(projContent, filamentMap);
+    } catch(e) {}
   }
 
-  // --- 8. Assembla risultato ---
-  var filamentArray = [];
-  Object.keys(filamentMap).forEach(function(k) {
-    filamentArray.push(filamentMap[k]);
-  });
+  // 1d. Leggi plate_X.json per nomi oggetti e info piatti
+  var plateJsonData = [];
+  for (var pi = 1; pi <= 10; pi++) {
+    var pjFile = zip.file('Metadata/plate_' + pi + '.json');
+    if (pjFile) {
+      try {
+        var pjContent = await pjFile.async('string');
+        plateJsonData.push(JSON.parse(pjContent));
+      } catch(e) {}
+    } else break;
+  }
 
-  // Calcola totali
-  var totalWeight = 0, totalTime = 0;
-  plates.forEach(function(p) {
-    totalWeight += p.weight || 0;
-    totalTime += p.time || 0;
-  });
+  // 1e. Leggi model_settings.config per capire quali extruder sono usati
+  var usedExtruders = {};
+  var modelSettingsFile = zip.file('Metadata/model_settings.config');
+  if (modelSettingsFile) {
+    try {
+      var msXml = await modelSettingsFile.async('string');
+      var extMatches = msXml.match(/key="extruder"\s+value="(\d+)"/g) || [];
+      extMatches.forEach(function(m) {
+        var val = m.match(/value="(\d+)"/);
+        if (val) usedExtruders[String(parseInt(val[1]) - 1)] = true; // 1-based → 0-based
+      });
+    } catch(e) {}
+  }
 
-  // Se non abbiamo plates ma abbiamo filaments, crea un plate generico
-  if (!plates.length && filamentArray.length) {
-    var genWeight = filamentArray.reduce(function(s,f){return s + (f.weight||0);}, 0);
-    plates.push({
-      name: fileName.replace(/\.3mf$/i,''),
-      weight: genWeight,
-      time: 0,
-      filamentIndices: filamentArray.map(function(f,i){return i;})
+  // ====== FASE 2: Se non ci sono dati di slicing, leggi il modello 3D ======
+  if (!hasSliceData) {
+    result.source = 'generic_3mf';
+    result.estimatedFromMesh = true;
+
+    // Cerca il file del modello 3D
+    var modelFile = zip.file('3D/3dmodel.model');
+    var modelTooLarge = false;
+    if (!modelFile) {
+      // Alcuni esportatori usano path diversi o sub-files
+      zip.forEach(function(path, entry) {
+        if (!modelFile && path.match(/3dmodel\.model$/i)) modelFile = entry;
+      });
+    }
+
+    // Controlla anche i sub-models (Bambu li mette in 3D/Objects/)
+    var subModelFiles = [];
+    zip.forEach(function(path, entry) {
+      if (path.match(/^3D\/Objects\/.*\.model$/i)) {
+        subModelFiles.push({path: path, entry: entry, size: entry._data ? entry._data.uncompressedSize || 0 : 0});
+      }
     });
-    totalWeight = genWeight;
+
+    // Se il modello principale o sub-modelli sono troppo grandi (>20MB), skip mesh parsing
+    var MAX_MESH_SIZE = 20 * 1024 * 1024; // 20MB
+    if (modelFile) {
+      try {
+        var modelSize = 0;
+        // Stima dimensione
+        zip.forEach(function(path, entry) {
+          if (path === '3D/3dmodel.model' || path.match(/^3D\/Objects\//)) {
+            modelSize += entry._data ? (entry._data.uncompressedSize || entry._data.compressedSize || 0) : 0;
+          }
+        });
+        if (modelSize > MAX_MESH_SIZE) modelTooLarge = true;
+      } catch(e) { /* proceed */ }
+    }
+
+    // Prova ad estrarre i materiali dal modello principale (leggero)
+    if (modelFile && !modelTooLarge) {
+      try {
+        var modelXml = await modelFile.async('string');
+        var meshResult = parse3dModel(modelXml);
+
+        // Estrai materiali/colori dal modello
+        if (meshResult.materials && meshResult.materials.length) {
+          meshResult.materials.forEach(function(mat, idx) {
+            var id = String(idx);
+            filamentMap[id] = {
+              id: id,
+              type: mat.type || 'PLA',
+              color: mat.color || '#888888',
+              colorName: guessColorName(mat.color || '#888888'),
+              weight: 0,
+              trayId: id
+            };
+          });
+        }
+
+        // Calcola volume e peso stimato
+        if (meshResult.totalVolumeMM3 > 0) {
+          var volumeCM3 = meshResult.totalVolumeMM3 / 1000; // mm³ → cm³
+          // Usa la densità dal project_settings se disponibile
+          var density = 1.24; // default PLA
+          var firstFilKey = Object.keys(filamentMap)[0];
+          if (firstFilKey && filamentMap[firstFilKey].density) {
+            density = filamentMap[firstFilKey].density;
+          } else {
+            var firstMat = (meshResult.materials && meshResult.materials[0]) ? meshResult.materials[0].type : '';
+            if (firstMat) {
+              var densityMap = {
+                'PLA': 1.24, 'PETG': 1.27, 'ABS': 1.04, 'ASA': 1.07,
+                'TPU': 1.21, 'Nylon': 1.14, 'PA': 1.14, 'PC': 1.20,
+                'PVA': 1.19, 'HIPS': 1.04, 'PP': 0.90
+              };
+              Object.keys(densityMap).forEach(function(k) {
+                if (firstMat.toUpperCase().indexOf(k.toUpperCase()) >= 0) density = densityMap[k];
+              });
+            }
+          }
+
+          var estimatedWeightG = volumeCM3 * density;
+          // Infill non è al 100%, stima ~25% infill + pareti = fattore ~0.35-0.45 del volume pieno
+          // Usiamo 0.40 come stima ragionevole
+          var infillFactor = 0.40;
+          estimatedWeightG = estimatedWeightG * infillFactor;
+
+          // Stima tempo: ~15-25g/ora per FDM standard (0.4mm nozzle, layer 0.2mm)
+          var estimatedTimeH = estimatedWeightG / 20; // ~20g/ora come media
+
+          // Distribuisci peso tra i materiali se multicolore
+          if (Object.keys(filamentMap).length > 0) {
+            var perFil = estimatedWeightG / Object.keys(filamentMap).length;
+            Object.keys(filamentMap).forEach(function(k) {
+              filamentMap[k].weight = perFil;
+            });
+          }
+
+          // Se non abbiamo filamenti, crea uno di default PLA
+          if (Object.keys(filamentMap).length === 0) {
+            filamentMap['0'] = {
+              id: '0', type: 'PLA', color: '#FFFFFF',
+              colorName: 'Bianco', weight: estimatedWeightG, trayId: '0'
+            };
+          }
+
+          // Crea plate
+          var objNames = meshResult.objectNames || [];
+          var plateName = objNames.length ? objNames.join(', ') : fileName.replace(/\.3mf$/i, '');
+
+          result.plates.push({
+            name: plateName,
+            weight: estimatedWeightG,
+            time: estimatedTimeH * 3600,
+            filamentIndices: Object.keys(filamentMap)
+          });
+
+          result.totalWeight = estimatedWeightG;
+          result.totalTime = estimatedTimeH * 3600;
+        }
+      } catch(e) {
+        console.error('Errore parsing modello 3D:', e);
+      }
+    }
+
+    // FALLBACK: modello troppo grande o parse fallito — usa plate JSON per stima
+    if ((modelTooLarge || !result.plates.length) && plateJsonData.length) {
+      // Stima dal plate JSON: usa le aree degli oggetti come proxy
+      var totalArea = 0;
+      var objNames = [];
+      plateJsonData.forEach(function(pj) {
+        if (pj.bbox_objects) {
+          pj.bbox_objects.forEach(function(bo) {
+            if (bo.name && bo.name !== 'wipe_tower') {
+              totalArea += bo.area || 0;
+              objNames.push(bo.name);
+            }
+          });
+        }
+      });
+
+      if (totalArea > 0) {
+        // Stima approssimativa: area in mm² * altezza media stimata (15mm) * infill (0.4) * densità
+        var avgHeight = 15; // mm stimati
+        var estimatedVolumeMM3 = totalArea * avgHeight;
+        var density = 1.24;
+        var firstFilKey = Object.keys(filamentMap)[0];
+        if (firstFilKey && filamentMap[firstFilKey].density) density = filamentMap[firstFilKey].density;
+
+        var estimatedWeightG = (estimatedVolumeMM3 / 1000) * density * 0.40;
+        var estimatedTimeH = estimatedWeightG / 20;
+
+        // Distribuisci peso tra filamenti usati
+        var usedFilKeys = Object.keys(usedExtruders).length ? Object.keys(usedExtruders) : Object.keys(filamentMap);
+        if (usedFilKeys.length) {
+          var perFil = estimatedWeightG / usedFilKeys.length;
+          usedFilKeys.forEach(function(k) {
+            if (filamentMap[k]) filamentMap[k].weight = perFil;
+          });
+        }
+
+        // Crea plates dai plate JSON
+        plateJsonData.forEach(function(pj, idx) {
+          var pObjNames = [];
+          var pArea = 0;
+          if (pj.bbox_objects) {
+            pj.bbox_objects.forEach(function(bo) {
+              if (bo.name && bo.name !== 'wipe_tower') {
+                pObjNames.push(bo.name);
+                pArea += bo.area || 0;
+              }
+            });
+          }
+          var plateFrac = totalArea > 0 ? pArea / totalArea : 1 / plateJsonData.length;
+          var plateName = pObjNames.length ? pObjNames.slice(0,3).join(', ') + (pObjNames.length > 3 ? ' +' + (pObjNames.length-3) : '') : 'Piatto ' + (idx+1);
+          result.plates.push({
+            name: plateName,
+            weight: estimatedWeightG * plateFrac,
+            time: estimatedTimeH * 3600 * plateFrac,
+            filamentIndices: usedFilKeys,
+            objectNames: pObjNames
+          });
+        });
+
+        result.totalWeight = estimatedWeightG;
+        result.totalTime = estimatedTimeH * 3600;
+      }
+    }
+
+    // Se ancora nessun plate, fallback minimale con solo i filamenti
+    if (!result.plates.length && Object.keys(filamentMap).length) {
+      result.plates.push({
+        name: fileName.replace(/\.3mf$/i, ''),
+        weight: 0,
+        time: 0,
+        filamentIndices: Object.keys(filamentMap)
+      });
+    }
+  }
+
+  // ====== FASE 3: Assembla risultato finale ======
+  var filamentArray = [];
+  var hasUsedExtruderInfo = Object.keys(usedExtruders).length > 0;
+  Object.keys(filamentMap).forEach(function(k) {
+    var f = filamentMap[k];
+    // Se sappiamo quali extruder sono usati, filtra
+    if (hasUsedExtruderInfo && !usedExtruders[k]) return;
+    filamentArray.push(f);
+  });
+  // Se il filtro ha rimosso tutto, usa tutti i filamenti
+  if (!filamentArray.length) {
+    Object.keys(filamentMap).forEach(function(k) {
+      filamentArray.push(filamentMap[k]);
+    });
+  }
+
+  // Totali (per file slicati)
+  if (hasSliceData) {
+    var totalWeight = 0, totalTime = 0;
+    result.plates.forEach(function(p) {
+      totalWeight += p.weight || 0;
+      totalTime += p.time || 0;
+    });
+    result.totalWeight = totalWeight;
+    result.totalTime = totalTime;
+  }
+
+  // Arricchisci plates con info da plate_X.json
+  if (plateJsonData.length && !hasSliceData) {
+    // File non slicato ma con plate json — estrai nomi oggetti
+    plateJsonData.forEach(function(pj, idx) {
+      var objNames = [];
+      if (pj.bbox_objects) {
+        pj.bbox_objects.forEach(function(bo) {
+          if (bo.name && bo.name !== 'wipe_tower') objNames.push(bo.name);
+        });
+      }
+      var plateName = objNames.length ? objNames.slice(0,3).join(', ') + (objNames.length > 3 ? ' +' + (objNames.length-3) : '') : 'Piatto ' + (idx+1);
+      // Aggiorna o crea plate
+      if (result.plates[idx]) {
+        result.plates[idx].name = plateName;
+        result.plates[idx].objectNames = objNames;
+      }
+    });
+  }
+
+  // Se nessun filamento trovato ma abbiamo plates
+  if (!filamentArray.length && result.plates.length) {
+    filamentArray.push({
+      id:'0', type:'PLA', color:'#FFFFFF',
+      colorName:'Bianco', weight: result.totalWeight, trayId:'0'
+    });
   }
 
   var usedColors = {};
-  filamentArray.forEach(function(f) {
-    if (f.color) usedColors[f.color] = true;
-  });
+  filamentArray.forEach(function(f) { if (f.color) usedColors[f.color] = true; });
   var colorCount = Object.keys(usedColors).length;
-  if (colorCount < filamentArray.length) colorCount = filamentArray.length;
 
-  result.plates = plates;
   result.filaments = filamentArray;
-  result.totalWeight = totalWeight;
-  result.totalTime = totalTime;
   result.isMulticolor = filamentArray.length > 1;
   result.colorCount = Math.max(colorCount, filamentArray.length);
+
+  return result;
+}
+
+// ============================================================
+// PARSER MODELLO 3D (mesh + materiali + colori)
+// ============================================================
+function parse3dModel(xml) {
+  var result = {
+    totalVolumeMM3: 0,
+    materials: [],
+    objectNames: [],
+    objectCount: 0
+  };
+
+  try {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(xml, 'text/xml');
+
+    // Unità di misura
+    var modelEl = doc.querySelector('model');
+    var unit = modelEl ? (modelEl.getAttribute('unit') || 'millimeter') : 'millimeter';
+    var unitScale = 1; // mm
+    if (unit === 'micron') unitScale = 0.001;
+    else if (unit === 'centimeter') unitScale = 10;
+    else if (unit === 'inch') unitScale = 25.4;
+    else if (unit === 'foot') unitScale = 304.8;
+    else if (unit === 'meter') unitScale = 1000;
+
+    // Materiali (basematerials)
+    var baseMats = doc.querySelectorAll('basematerials base, basematerial base');
+    if (!baseMats.length) {
+      // Prova con namespace
+      baseMats = doc.getElementsByTagName('base');
+    }
+    for (var mi = 0; mi < baseMats.length; mi++) {
+      var bm = baseMats[mi];
+      var matName = bm.getAttribute('name') || bm.getAttribute('displayname') || '';
+      var matColor = bm.getAttribute('displaycolor') || bm.getAttribute('color') || '#888888';
+      // Rimuovi alpha se presente (formato #RRGGBBAA → #RRGGBB)
+      if (matColor.length === 9 && matColor.charAt(0) === '#') {
+        matColor = '#' + matColor.substring(1, 7);
+      }
+      result.materials.push({
+        type: matName || 'PLA',
+        color: matColor,
+        colorName: guessColorName(matColor)
+      });
+    }
+
+    // Cerca anche colorgroup per multicolore (Bambu/Prusa)
+    var colorGroups = doc.querySelectorAll('m\\:colorgroup color, colorgroup color');
+    if (colorGroups.length && !result.materials.length) {
+      for (var ci = 0; ci < colorGroups.length; ci++) {
+        var cColor = colorGroups[ci].getAttribute('color') || '#888888';
+        if (cColor.length === 9 && cColor.charAt(0) === '#') cColor = '#' + cColor.substring(1, 7);
+        result.materials.push({
+          type: 'PLA',
+          color: cColor,
+          colorName: guessColorName(cColor)
+        });
+      }
+    }
+
+    // Oggetti e mesh
+    var objects = doc.querySelectorAll('object');
+    for (var oi = 0; oi < objects.length; oi++) {
+      var obj = objects[oi];
+      var objType = obj.getAttribute('type') || 'model';
+      if (objType !== 'model' && objType !== 'solidsupport') continue;
+
+      var objName = obj.getAttribute('name') || '';
+      // Cerca nome nei metadati dell'oggetto
+      var metaEls = obj.querySelectorAll('metadata, metadatagroup metadata');
+      for (var mi2 = 0; mi2 < metaEls.length; mi2++) {
+        var mName = metaEls[mi2].getAttribute('name') || '';
+        if (mName.toLowerCase() === 'name' || mName.toLowerCase() === 'title') {
+          objName = metaEls[mi2].textContent || objName;
+        }
+      }
+      if (objName) result.objectNames.push(objName);
+
+      // Estrai vertices e triangles
+      var mesh = obj.querySelector('mesh');
+      if (!mesh) continue;
+
+      var vertexEls = mesh.querySelectorAll('vertices vertex');
+      var triangleEls = mesh.querySelectorAll('triangles triangle');
+
+      if (!vertexEls.length || !triangleEls.length) continue;
+
+      // Leggi vertici
+      var verts = [];
+      for (var vi = 0; vi < vertexEls.length; vi++) {
+        var vx = parseFloat(vertexEls[vi].getAttribute('x') || 0) * unitScale;
+        var vy = parseFloat(vertexEls[vi].getAttribute('y') || 0) * unitScale;
+        var vz = parseFloat(vertexEls[vi].getAttribute('z') || 0) * unitScale;
+        verts.push([vx, vy, vz]);
+      }
+
+      // Calcola volume con il metodo dei tetraedri firmati (signed volume)
+      // V = Σ (1/6) * (v1 · (v2 × v3)) per ogni triangolo
+      var volume = 0;
+      for (var ti = 0; ti < triangleEls.length; ti++) {
+        var tri = triangleEls[ti];
+        var i1 = parseInt(tri.getAttribute('v1') || 0);
+        var i2 = parseInt(tri.getAttribute('v2') || 0);
+        var i3 = parseInt(tri.getAttribute('v3') || 0);
+
+        if (i1 >= verts.length || i2 >= verts.length || i3 >= verts.length) continue;
+
+        var a = verts[i1], b = verts[i2], c = verts[i3];
+        // Volume firmato del tetraedro con origine
+        var v321 = c[0] * b[1] * a[2];
+        var v231 = b[0] * c[1] * a[2];
+        var v312 = c[0] * a[1] * b[2];
+        var v132 = a[0] * c[1] * b[2];
+        var v213 = b[0] * a[1] * c[2];
+        var v123 = a[0] * b[1] * c[2];
+        volume += (-v321 + v231 + v312 - v132 - v213 + v123) / 6.0;
+      }
+
+      result.totalVolumeMM3 += Math.abs(volume);
+      result.objectCount++;
+    }
+
+    // Se non abbiamo trovato nomi, usa il conteggio
+    if (!result.objectNames.length && result.objectCount > 0) {
+      result.objectNames.push(result.objectCount + ' oggett' + (result.objectCount === 1 ? 'o' : 'i'));
+    }
+
+  } catch(e) {
+    console.error('parse3dModel error:', e);
+  }
 
   return result;
 }
@@ -7072,10 +7442,52 @@ function parseGcodeFilaments(gcode, filamentMap) {
   }
 }
 
-function parseProjectFilaments(xml, filamentMap) {
+function parseProjectFilaments(projContent, filamentMap) {
   try {
-    // Cerca parametri filamento nel project settings
-    var lines = xml.split('\n');
+    // Bambu Studio salva project_settings.config come JSON
+    var proj = null;
+    try {
+      proj = JSON.parse(projContent);
+    } catch(e) {
+      // Fallback: prova come key=value lines (vecchi formati)
+      parseProjectFilamentsLegacy(projContent, filamentMap);
+      return;
+    }
+
+    var types = proj.filament_type || [];
+    var colors = proj.filament_colour || proj.filament_color || [];
+    var densities = proj.filament_density || [];
+    var costs = proj.filament_cost || [];
+    var settingsIds = proj.filament_settings_id || [];
+
+    for (var i = 0; i < Math.max(types.length, colors.length); i++) {
+      var id = String(i);
+      var type = (types[i] || 'PLA').trim();
+      var color = (colors[i] || '#888888').trim();
+      // Bambu usa formato #RRGGBB senza alpha
+      if (color.length === 9 && color.charAt(0) === '#') color = '#' + color.substring(1, 7);
+      var density = parseFloat(densities[i]) || 1.24;
+
+      filamentMap[id] = filamentMap[id] || {
+        id: id, type: type, color: color,
+        colorName: guessColorName(color),
+        weight: 0, trayId: String(i + 1),
+        density: density,
+        cost: parseFloat(costs[i]) || 0,
+        settingsId: settingsIds[i] || ''
+      };
+      // Aggiorna sempre con i dati dal project settings (più affidabili)
+      filamentMap[id].type = type;
+      filamentMap[id].color = color;
+      filamentMap[id].colorName = guessColorName(color);
+      filamentMap[id].density = density;
+    }
+  } catch(e) { console.error('parseProjectFilaments:', e); }
+}
+
+function parseProjectFilamentsLegacy(text, filamentMap) {
+  try {
+    var lines = text.split('\n');
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       if (line.indexOf('filament_type') >= 0 && line.indexOf('=') >= 0) {
@@ -7153,7 +7565,7 @@ function guessColorName(hex) {
 // --- Rendering del risultato ---
 function render3mfResult(data, container) {
   if (!data.plates.length && !data.filaments.length) {
-    container.innerHTML = '<div style="text-align:center;padding:2rem"><div style="color:var(--yellow);font-size:14px;margin-bottom:8px">Nessun dato di slicing trovato</div><div style="font-size:12px;color:var(--text3)">Assicurati che il file .3mf sia stato salvato da Bambu Studio<br>dopo lo slicing (deve contenere i dati di peso e tempo).</div><div style="margin-top:1.25rem"><button class="btn" onclick="document.getElementById(\'tmf-modal-backdrop\').classList.remove(\'open\')">Chiudi</button></div></div>';
+    container.innerHTML = '<div style="text-align:center;padding:2rem"><div style="color:var(--yellow);font-size:14px;margin-bottom:8px">Nessun dato trovato nel file .3mf</div><div style="font-size:12px;color:var(--text3)">Il file potrebbe essere vuoto o in un formato non supportato.<br>Prova con un file .3mf esportato da Bambu Studio, OrcaSlicer, PrusaSlicer o scaricato da MakeWorld/Thingiverse.</div><div style="margin-top:1.25rem"><button class="btn" onclick="document.getElementById(\'tmf-modal-backdrop\').classList.remove(\'open\')">Chiudi</button></div></div>';
     return;
   }
 
@@ -7162,9 +7574,23 @@ function render3mfResult(data, container) {
 
   var html = '<div class="tmf-result">';
 
+  // --- Avviso se dati stimati ---
+  if (data.estimatedFromMesh) {
+    html += '<div style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.25);border-radius:var(--radius-lg);padding:.875rem 1rem;margin-bottom:1rem;display:flex;align-items:flex-start;gap:10px">';
+    html += '<span style="color:var(--yellow);font-size:16px;flex-shrink:0;margin-top:1px">⚠</span>';
+    html += '<div><div style="font-size:13px;color:var(--yellow);font-weight:500;margin-bottom:3px">Dati stimati dalla mesh 3D</div>';
+    html += '<div style="font-size:12px;color:var(--text2);line-height:1.5">Questo file non contiene dati di slicing. Peso e tempo sono calcolati dal volume del modello 3D con infill stimato ~40%. Per dati precisi, apri il file in Bambu Studio, fai lo slicing e ri-esporta il .3mf.</div>';
+    html += '</div></div>';
+  }
+
   // --- Header con info file ---
-  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1.25rem">';
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap">';
   html += '<div style="font-size:13px;color:var(--text2)">'+escHtml(data.fileName)+'</div>';
+  if (data.source === 'bambu_sliced') {
+    html += '<span style="font-size:10px;padding:3px 8px;border-radius:20px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25);color:var(--green);font-family:var(--mono)">SLICATO</span>';
+  } else {
+    html += '<span style="font-size:10px;padding:3px 8px;border-radius:20px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.25);color:var(--yellow);font-family:var(--mono)">STIMATO</span>';
+  }
   if (data.isMulticolor) {
     html += '<div class="tmf-multicolor-badge"><div class="tmf-multicolor-dots">';
     data.filaments.slice(0,5).forEach(function(f) {
@@ -7329,6 +7755,9 @@ function import3mfToCalc() {
 
   // Aggiungi nota con dettagli filamenti
   var noteLines = ['[Importato da .3mf: ' + data.fileName + ']'];
+  if (data.estimatedFromMesh) {
+    noteLines.push('⚠ DATI STIMATI dalla mesh 3D (infill ~40%) — per dati precisi, sliceare in Bambu Studio');
+  }
   data.filaments.forEach(function(f) {
     noteLines.push('• ' + f.type + ' — ' + (f.colorName || f.color) + (f.weight ? ' (' + f.weight.toFixed(1) + 'g)' : ''));
   });
