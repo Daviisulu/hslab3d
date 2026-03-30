@@ -5948,9 +5948,11 @@ function parseBambuEmail() {
         '</div>'+
       '</div>';
     }).join('')+
-    '<button class="btn btn-primary" style="margin-top:12px;width:100%;justify-content:center" onclick="confirmBambuImport('+JSON.stringify(deduped).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026')+')">' +
+    '<button class="btn btn-primary" style="margin-top:12px;width:100%;justify-content:center" onclick="confirmBambuImport(window._bambuImportItems)">' +
       '✓ Aggiungi tutti alla libreria</button>'+
   '</div>';
+  // Store items in a global so the onclick button can access them safely
+  window._bambuImportItems = deduped;
 }
 
 function confirmBambuImport(items) {
