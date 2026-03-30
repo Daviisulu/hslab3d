@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
 
 :root {
@@ -1041,6 +1042,90 @@ select { cursor: pointer; }
 /* ===== SEGNA PAGATO ===== */
 .pagato-btn { border-color:rgba(52,211,153,.3) !important; color:var(--green) !important; }
 .pagato-btn:hover { background:rgba(52,211,153,.06) !important; }
+
+/* ===== 3MF IMPORT ===== */
+.tmf-btn {
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:var(--radius);
+  border:1px solid rgba(56,189,248,.35);
+  background:rgba(56,189,248,.06);
+  color:var(--accent);font-family:var(--sans);
+  font-size:13px;font-weight:500;cursor:pointer;
+  transition:all .15s;
+}
+.tmf-btn:hover { background:rgba(56,189,248,.12);border-color:var(--accent);transform:translateY(-1px); }
+.tmf-btn svg { width:16px;height:16px;flex-shrink:0; }
+.tmf-dropzone {
+  border:2px dashed var(--border2);border-radius:var(--radius-lg);
+  padding:2.5rem 1.5rem;text-align:center;cursor:pointer;
+  transition:all .2s;background:var(--bg3);
+}
+.tmf-dropzone:hover,.tmf-dropzone.dragover {
+  border-color:var(--accent);background:rgba(56,189,248,.04);
+}
+.tmf-dropzone-icon { font-size:36px;margin-bottom:.75rem;opacity:.5; }
+.tmf-dropzone-text { font-size:14px;color:var(--text2);margin-bottom:4px; }
+.tmf-dropzone-sub { font-size:12px;color:var(--text3); }
+.tmf-result { animation:fadeIn .25s ease; }
+.tmf-plate {
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:10px;
+}
+.tmf-plate-title {
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border);
+}
+.tmf-plate-name { font-size:15px;font-weight:600;color:var(--text); }
+.tmf-plate-badge {
+  font-family:var(--mono);font-size:10px;padding:3px 9px;
+  border-radius:20px;text-transform:uppercase;letter-spacing:.05em;
+}
+.tmf-stat-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem; }
+.tmf-stat {
+  background:var(--bg2);border-radius:var(--radius);padding:.75rem;text-align:center;
+}
+.tmf-stat-label { font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px; }
+.tmf-stat-value { font-size:18px;font-weight:600;font-family:var(--mono);color:var(--text); }
+.tmf-stat-value.accent { color:var(--accent); }
+.tmf-filament-row {
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;background:var(--bg2);border-radius:var(--radius);
+  margin-bottom:6px;border:1px solid var(--border);
+}
+.tmf-fil-swatch {
+  width:24px;height:24px;border-radius:6px;flex-shrink:0;
+  border:1px solid rgba(255,255,255,.12);
+}
+.tmf-fil-info { flex:1;min-width:0; }
+.tmf-fil-name { font-size:13px;font-weight:500;color:var(--text); }
+.tmf-fil-meta { font-size:11px;color:var(--text2);font-family:var(--mono); }
+.tmf-fil-weight { font-family:var(--mono);font-size:13px;color:var(--accent);flex-shrink:0; }
+.tmf-multicolor-badge {
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--mono);font-size:10px;padding:3px 9px;
+  border-radius:20px;letter-spacing:.04em;
+  background:linear-gradient(135deg,rgba(255,100,100,.12),rgba(100,200,255,.12),rgba(100,255,150,.12));
+  border:1px solid rgba(255,255,255,.15);color:var(--text);
+}
+.tmf-multicolor-dots { display:flex;gap:2px; }
+.tmf-multicolor-dots span { width:8px;height:8px;border-radius:50%;border:1px solid rgba(255,255,255,.15); }
+.tmf-price-summary {
+  background:var(--bg2);border:1px solid var(--accent);
+  border-radius:var(--radius-lg);padding:1.25rem;margin-top:1rem;
+}
+.tmf-price-row {
+  display:flex;justify-content:space-between;align-items:center;
+  padding:5px 0;font-size:13px;
+}
+.tmf-price-row .label { color:var(--text2); }
+.tmf-price-row .value { font-family:var(--mono);color:var(--text); }
+.tmf-price-total {
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding-top:.75rem;margin-top:.5rem;border-top:1px solid var(--border);
+}
+.tmf-price-total .label { font-family:var(--mono);font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em; }
+.tmf-price-total .value { font-family:var(--mono);font-size:28px;font-weight:700;color:var(--accent);letter-spacing:-.02em; }
+.tmf-actions { display:flex;gap:8px;margin-top:1.25rem; }
 </style>
 </head>
 <body>
@@ -1570,6 +1655,11 @@ select { cursor: pointer; }
         <div class="page-sub">Aggiungi oggetti, seleziona cliente e bobina</div>
       </div>
       <div style="display:flex;gap:6px">
+        <button class="tmf-btn" onclick="document.getElementById('tmf-file-input').click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Importa .3mf
+        </button>
+        <input type="file" id="tmf-file-input" accept=".3mf" style="display:none" onchange="handle3mfFile(this)">
         <button class="btn" onclick="resetCalc()" style="font-size:12px;padding:5px 12px">Azzera</button>
         <button class="btn btn-primary" onclick="calcola()" style="font-size:14px;padding:8px 20px">Calcola prezzo</button>
       </div>
@@ -2228,6 +2318,28 @@ select { cursor: pointer; }
 <!-- DETAIL MODAL -->
 <div class="modal-backdrop" id="modal-backdrop" onclick="closeModal(event)">
   <div class="modal" id="modal-inner"></div>
+</div>
+
+<!-- 3MF IMPORT MODAL -->
+<div class="modal-backdrop" id="tmf-modal-backdrop" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:250">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <div class="modal-title" id="tmf-modal-title">Importa file .3mf</div>
+      <button class="btn btn-danger" onclick="document.getElementById('tmf-modal-backdrop').classList.remove('open')">Chiudi</button>
+    </div>
+    <div id="tmf-modal-body">
+      <div class="tmf-dropzone" id="tmf-dropzone"
+        onclick="document.getElementById('tmf-file-input-modal').click()"
+        ondragover="event.preventDefault();this.classList.add('dragover')"
+        ondragleave="this.classList.remove('dragover')"
+        ondrop="event.preventDefault();this.classList.remove('dragover');handle3mfDrop(event)">
+        <div class="tmf-dropzone-icon">📦</div>
+        <div class="tmf-dropzone-text">Trascina qui il file <strong>.3mf</strong> di Bambu Studio</div>
+        <div class="tmf-dropzone-sub">oppure clicca per sfogliare</div>
+      </div>
+      <input type="file" id="tmf-file-input-modal" accept=".3mf" style="display:none" onchange="handle3mfFile(this)">
+    </div>
+  </div>
 </div>
 
 <script>
@@ -6631,6 +6743,611 @@ async function loadAllFromDB() {
     </button>
   </div>
 </div>
+
+<!-- SCRIPT 3MF IMPORT -->
+<script>
+// ============================================================
+// IMPORTAZIONE FILE .3MF (BAMBU STUDIO)
+// ============================================================
+// Il file .3mf è un archivio ZIP contenente XML con metadati
+// di slicing: peso, tempo, filamenti, colori, multicolore (AMS)
+
+function handle3mfFile(inputEl) {
+  var file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  inputEl.value = '';
+  parse3mfFile(file);
+}
+
+function handle3mfDrop(event) {
+  var file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.3mf')) {
+    showToast({id:'tmf-err', title:'Seleziona un file .3mf', duration:3000});
+    return;
+  }
+  parse3mfFile(file);
+}
+
+async function parse3mfFile(file) {
+  // Apri il modal
+  var backdrop = document.getElementById('tmf-modal-backdrop');
+  backdrop.classList.add('open');
+  var body = document.getElementById('tmf-modal-body');
+  body.innerHTML = '<div style="text-align:center;padding:2rem"><div style="font-size:14px;color:var(--text2);margin-bottom:8px">Analisi in corso…</div><div style="font-size:12px;color:var(--text3)">'+escHtml(file.name)+' ('+formatBytes(file.size)+')</div></div>';
+  document.getElementById('tmf-modal-title').textContent = 'Importa: ' + file.name;
+
+  try {
+    var zip = await JSZip.loadAsync(file);
+    var parsed = await extract3mfData(zip, file.name);
+    render3mfResult(parsed, body);
+  } catch(err) {
+    body.innerHTML = '<div style="text-align:center;padding:2rem"><div style="color:var(--red);font-size:14px;margin-bottom:8px">Errore di lettura</div><div style="font-size:12px;color:var(--text3)">'+escHtml(err.message)+'</div><div style="margin-top:1rem"><button class="btn" onclick="document.getElementById(\'tmf-modal-backdrop\').classList.remove(\'open\')">Chiudi</button></div></div>';
+  }
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+async function extract3mfData(zip, fileName) {
+  var result = {
+    fileName: fileName,
+    plates: [],
+    filaments: [],
+    totalWeight: 0,
+    totalTime: 0,
+    isMulticolor: false,
+    colorCount: 0
+  };
+
+  // --- 1. Leggi Metadata/slice_info.config (Bambu Studio) ---
+  var sliceInfo = null;
+  var sliceFiles = ['Metadata/slice_info.config', 'Metadata/project_settings.config'];
+  for (var si = 0; si < sliceFiles.length; si++) {
+    var sf = zip.file(sliceFiles[si]);
+    if (sf) { sliceInfo = await sf.async('string'); break; }
+  }
+
+  // --- 2. Leggi Metadata/plate_X.gcode metadata o model settings ---
+  var plateFiles = [];
+  zip.forEach(function(path, entry) {
+    if (path.match(/Metadata\/plate_\d+/i) || path.match(/Metadata\/slice_info/i)) {
+      plateFiles.push(path);
+    }
+  });
+
+  // --- 3. Prova a leggere il 3D model file per i filamenti ---
+  var modelXml = null;
+  var modelFile = zip.file('3D/3dmodel.model');
+  if (modelFile) {
+    modelXml = await modelFile.async('string');
+  }
+
+  // --- 4. Leggi il config principale di Bambu Studio ---
+  var configFile = zip.file('Metadata/model_settings.config');
+  var configXml = configFile ? await configFile.async('string') : null;
+
+  // --- 5. Leggi plate list da slice_info ---
+  var plates = [];
+  var filamentMap = {};
+
+  if (sliceInfo) {
+    plates = parseSliceInfo(sliceInfo, filamentMap);
+  }
+
+  // --- 6. Se non trovato slice_info, cerca nei .gcode files ---
+  if (!plates.length) {
+    var gcodeEntries = [];
+    zip.forEach(function(path, entry) {
+      if (path.match(/\.gcode$/i)) {
+        gcodeEntries.push({path: path, entry: entry});
+      }
+    });
+    for (var gi = 0; gi < gcodeEntries.length; gi++) {
+      try {
+        var gcText = await gcodeEntries[gi].entry.async('string');
+        var gcodePlate = parseGcodeMetadata(gcText, gcodeEntries[gi].path);
+        if (gcodePlate) plates.push(gcodePlate);
+        parseGcodeFilaments(gcText, filamentMap);
+      } catch(e) { /* skip */ }
+    }
+  }
+
+  // --- 7. Cerca filamenti nel project_settings.config ---
+  var projSettings = zip.file('Metadata/project_settings.config');
+  if (projSettings) {
+    try {
+      var projXml = await projSettings.async('string');
+      parseProjectFilaments(projXml, filamentMap);
+    } catch(e) { /* skip */ }
+  }
+
+  // --- 8. Assembla risultato ---
+  var filamentArray = [];
+  Object.keys(filamentMap).forEach(function(k) {
+    filamentArray.push(filamentMap[k]);
+  });
+
+  // Calcola totali
+  var totalWeight = 0, totalTime = 0;
+  plates.forEach(function(p) {
+    totalWeight += p.weight || 0;
+    totalTime += p.time || 0;
+  });
+
+  // Se non abbiamo plates ma abbiamo filaments, crea un plate generico
+  if (!plates.length && filamentArray.length) {
+    var genWeight = filamentArray.reduce(function(s,f){return s + (f.weight||0);}, 0);
+    plates.push({
+      name: fileName.replace(/\.3mf$/i,''),
+      weight: genWeight,
+      time: 0,
+      filamentIndices: filamentArray.map(function(f,i){return i;})
+    });
+    totalWeight = genWeight;
+  }
+
+  var usedColors = {};
+  filamentArray.forEach(function(f) {
+    if (f.color) usedColors[f.color] = true;
+  });
+  var colorCount = Object.keys(usedColors).length;
+  if (colorCount < filamentArray.length) colorCount = filamentArray.length;
+
+  result.plates = plates;
+  result.filaments = filamentArray;
+  result.totalWeight = totalWeight;
+  result.totalTime = totalTime;
+  result.isMulticolor = filamentArray.length > 1;
+  result.colorCount = Math.max(colorCount, filamentArray.length);
+
+  return result;
+}
+
+// --- Parser per slice_info.config (Bambu Studio XML) ---
+function parseSliceInfo(xml, filamentMap) {
+  var plates = [];
+  try {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(xml, 'text/xml');
+
+    // Filamenti definiti globalmente
+    var filElems = doc.querySelectorAll('filament');
+    if (!filElems.length) filElems = doc.querySelectorAll('Filament');
+    filElems.forEach(function(fel, idx) {
+      var id = fel.getAttribute('id') || fel.getAttribute('ID') || String(idx);
+      var type = fel.getAttribute('type') || fel.getAttribute('Type') || 'PLA';
+      var color = fel.getAttribute('color') || fel.getAttribute('Color') || '';
+      var colorHex = color || '#888888';
+      if (colorHex.length === 9 && colorHex.charAt(0) === '#') {
+        colorHex = '#' + colorHex.substring(1, 7); // rimuovi alpha
+      }
+      var trayId = fel.getAttribute('tray_id') || fel.getAttribute('tray_info_idx') || id;
+      filamentMap[id] = filamentMap[id] || {
+        id: id,
+        type: type,
+        color: colorHex,
+        colorName: guessColorName(colorHex),
+        weight: 0,
+        trayId: trayId
+      };
+      if (type && type !== 'PLA') filamentMap[id].type = type;
+      if (colorHex && colorHex !== '#888888') filamentMap[id].color = colorHex;
+    });
+
+    // Plate
+    var plateElems = doc.querySelectorAll('plate');
+    if (!plateElems.length) plateElems = doc.querySelectorAll('Plate');
+    plateElems.forEach(function(pel, idx) {
+      var pId = pel.getAttribute('plater_id') || pel.getAttribute('id') || String(idx + 1);
+      var prediction = pel.getAttribute('prediction') || '0';
+      var weight = pel.getAttribute('weight') || pel.getAttribute('filament_weight') || '0';
+
+      // Cerca peso nei sotto-elementi
+      var weightEls = pel.querySelectorAll('filament_weight, filament');
+      var plateWeight = parseFloat(weight) || 0;
+      var plateFilIndices = [];
+
+      // Bambu usa "filament" sub-elements per piatto con weight info
+      var subFils = pel.querySelectorAll('filament');
+      if (subFils.length) {
+        subFils.forEach(function(sf) {
+          var fId = sf.getAttribute('id') || sf.getAttribute('ID') || '0';
+          var fType = sf.getAttribute('type') || '';
+          var fColor = sf.getAttribute('color') || '';
+          var fWeight = parseFloat(sf.getAttribute('used_g') || sf.getAttribute('weight') || '0');
+          if (fColor.length === 9 && fColor.charAt(0) === '#') fColor = '#' + fColor.substring(1,7);
+
+          if (!filamentMap[fId]) {
+            filamentMap[fId] = {
+              id: fId, type: fType || 'PLA', color: fColor || '#888888',
+              colorName: guessColorName(fColor || '#888888'), weight: 0, trayId: fId
+            };
+          }
+          if (fWeight) filamentMap[fId].weight += fWeight;
+          if (fType) filamentMap[fId].type = fType;
+          if (fColor && fColor !== '#888888') filamentMap[fId].color = fColor;
+          filamentMap[fId].colorName = guessColorName(filamentMap[fId].color);
+          plateFilIndices.push(fId);
+          if (fWeight && !plateWeight) plateWeight += fWeight;
+        });
+      }
+
+      var timeSeconds = parseFloat(prediction) || 0;
+
+      plates.push({
+        name: 'Piatto ' + pId,
+        weight: plateWeight,
+        time: timeSeconds,
+        filamentIndices: plateFilIndices
+      });
+    });
+
+    // Se i filamenti non hanno peso, prova dal gcode_file nested
+    if (plates.length && !plates[0].weight) {
+      // Cerca attributi alternativi
+      plateElems.forEach(function(pel, idx) {
+        var attrs = pel.attributes;
+        for (var ai = 0; ai < attrs.length; ai++) {
+          var attr = attrs[ai];
+          if (attr.name.indexOf('weight') >= 0 || attr.name.indexOf('gram') >= 0) {
+            var val = parseFloat(attr.value);
+            if (val > 0 && plates[idx]) plates[idx].weight = val;
+          }
+        }
+      });
+    }
+  } catch(e) { /* parsing error, fall through */ }
+  return plates;
+}
+
+// --- Parser per .gcode embedded metadata ---
+function parseGcodeMetadata(gcode, path) {
+  var lines = gcode.substring(0, 8000).split('\n');
+  var weight = 0, time = 0, name = path.replace(/.*\//, '').replace('.gcode','');
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (line.indexOf('; total filament used') >= 0) {
+      var match = line.match(/([\d.]+)\s*g/);
+      if (match) weight = parseFloat(match[1]);
+    }
+    if (line.indexOf('; estimated printing time') >= 0 || line.indexOf('; total estimated time') >= 0) {
+      time = parseTimeString(line);
+    }
+    if (line.indexOf('; model printing time') >= 0) {
+      time = parseTimeString(line);
+    }
+    if (line.indexOf('; HEADER_BLOCK_END') >= 0) break;
+  }
+
+  if (!weight && !time) return null;
+  return { name: name, weight: weight, time: time, filamentIndices: [] };
+}
+
+function parseGcodeFilaments(gcode, filamentMap) {
+  var lines = gcode.substring(0, 15000).split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    // ; filament_type = PLA;PLA;PETG
+    if (line.indexOf('; filament_type') >= 0) {
+      var types = line.split('=')[1];
+      if (types) {
+        types.trim().split(';').forEach(function(t, idx) {
+          var id = String(idx);
+          if (!filamentMap[id]) filamentMap[id] = {id:id, type:t.trim(), color:'#888888', colorName:'', weight:0, trayId:id};
+          else filamentMap[id].type = t.trim();
+        });
+      }
+    }
+    // ; filament_colour = #FFFFFFFF;#FF0000FF
+    if (line.indexOf('; filament_colour') >= 0 || line.indexOf('; filament_color') >= 0) {
+      var colors = line.split('=')[1];
+      if (colors) {
+        colors.trim().split(';').forEach(function(c, idx) {
+          var id = String(idx);
+          var hex = c.trim();
+          if (hex.length === 9 && hex.charAt(0) === '#') hex = '#' + hex.substring(1,7);
+          if (!filamentMap[id]) filamentMap[id] = {id:id, type:'PLA', color:hex, colorName:guessColorName(hex), weight:0, trayId:id};
+          else { filamentMap[id].color = hex; filamentMap[id].colorName = guessColorName(hex); }
+        });
+      }
+    }
+    // ; filament used [g] = 12.34;5.67
+    if (line.indexOf('; filament used [g]') >= 0 || line.indexOf('; filament_used_g') >= 0) {
+      var weights = line.split('=')[1];
+      if (weights) {
+        weights.trim().split(';').forEach(function(w, idx) {
+          var id = String(idx);
+          var val = parseFloat(w.trim()) || 0;
+          if (!filamentMap[id]) filamentMap[id] = {id:id, type:'PLA', color:'#888888', colorName:'', weight:val, trayId:id};
+          else filamentMap[id].weight += val;
+        });
+      }
+    }
+    if (line.indexOf('; CONFIG_BLOCK_END') >= 0 || line.indexOf('; HEADER_BLOCK_END') >= 0) break;
+  }
+}
+
+function parseProjectFilaments(xml, filamentMap) {
+  try {
+    // Cerca parametri filamento nel project settings
+    var lines = xml.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (line.indexOf('filament_type') >= 0 && line.indexOf('=') >= 0) {
+        var types = line.split('=')[1];
+        if (types) {
+          types.trim().split(';').forEach(function(t, idx) {
+            var id = String(idx);
+            if (!filamentMap[id]) filamentMap[id] = {id:id, type:t.trim()||'PLA', color:'#888888', colorName:'', weight:0, trayId:id};
+            else if (t.trim()) filamentMap[id].type = t.trim();
+          });
+        }
+      }
+      if ((line.indexOf('filament_colour') >= 0 || line.indexOf('filament_color') >= 0) && line.indexOf('=') >= 0) {
+        var colors = line.split('=')[1];
+        if (colors) {
+          colors.trim().split(';').forEach(function(c, idx) {
+            var id = String(idx);
+            var hex = c.trim();
+            if (hex.length === 9 && hex.charAt(0) === '#') hex = '#' + hex.substring(1,7);
+            if (!filamentMap[id]) filamentMap[id] = {id:id, type:'PLA', color:hex, colorName:guessColorName(hex), weight:0, trayId:id};
+            else { filamentMap[id].color = hex; filamentMap[id].colorName = guessColorName(hex); }
+          });
+        }
+      }
+    }
+  } catch(e) { /* skip */ }
+}
+
+function parseTimeString(line) {
+  var seconds = 0;
+  var hm = line.match(/(\d+)h/); if (hm) seconds += parseInt(hm[1]) * 3600;
+  var mm = line.match(/(\d+)m/); if (mm) seconds += parseInt(mm[1]) * 60;
+  var sm = line.match(/(\d+)s/); if (sm) seconds += parseInt(sm[1]);
+  // Formato "1d 2h 30m 10s"
+  var dm = line.match(/(\d+)d/); if (dm) seconds += parseInt(dm[1]) * 86400;
+  return seconds;
+}
+
+function formatTime(seconds) {
+  if (!seconds) return '—';
+  var h = Math.floor(seconds / 3600);
+  var m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return h + 'h ' + m + 'min';
+  return m + ' min';
+}
+
+function guessColorName(hex) {
+  if (!hex || hex === '#888888') return '';
+  hex = hex.toLowerCase().replace('#','');
+  if (hex.length < 6) return '';
+  var r = parseInt(hex.substring(0,2),16);
+  var g = parseInt(hex.substring(2,4),16);
+  var b = parseInt(hex.substring(4,6),16);
+  var brightness = (r*299 + g*587 + b*114) / 1000;
+
+  if (r > 230 && g > 230 && b > 230) return 'Bianco';
+  if (r < 35 && g < 35 && b < 35) return 'Nero';
+  if (brightness < 50) return 'Nero';
+  if (r > 200 && g < 80 && b < 80) return 'Rosso';
+  if (r > 200 && g > 100 && g < 180 && b < 80) return 'Arancione';
+  if (r > 200 && g > 200 && b < 80) return 'Giallo';
+  if (r < 80 && g > 180 && b < 80) return 'Verde';
+  if (r < 80 && g > 180 && b > 180) return 'Ciano';
+  if (r < 80 && g < 80 && b > 180) return 'Blu';
+  if (r < 100 && g < 100 && b > 200) return 'Blu';
+  if (r > 60 && g > 60 && b > 200) return 'Blu';
+  if (r > 150 && g < 80 && b > 150) return 'Viola';
+  if (r > 200 && g < 120 && b > 150) return 'Rosa';
+  if (r > 160 && g > 100 && b > 60 && g < 160 && b < 120) return 'Marrone';
+  if (r > 150 && g > 150 && b > 150) return 'Grigio chiaro';
+  if (r > 80 && g > 80 && b > 80 && r < 160) return 'Grigio';
+  return '';
+}
+
+// --- Rendering del risultato ---
+function render3mfResult(data, container) {
+  if (!data.plates.length && !data.filaments.length) {
+    container.innerHTML = '<div style="text-align:center;padding:2rem"><div style="color:var(--yellow);font-size:14px;margin-bottom:8px">Nessun dato di slicing trovato</div><div style="font-size:12px;color:var(--text3)">Assicurati che il file .3mf sia stato salvato da Bambu Studio<br>dopo lo slicing (deve contenere i dati di peso e tempo).</div><div style="margin-top:1.25rem"><button class="btn" onclick="document.getElementById(\'tmf-modal-backdrop\').classList.remove(\'open\')">Chiudi</button></div></div>';
+    return;
+  }
+
+  // Calcola il prezzo con la logica del calcolatore
+  var pricing = calc3mfPrice(data);
+
+  var html = '<div class="tmf-result">';
+
+  // --- Header con info file ---
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1.25rem">';
+  html += '<div style="font-size:13px;color:var(--text2)">'+escHtml(data.fileName)+'</div>';
+  if (data.isMulticolor) {
+    html += '<div class="tmf-multicolor-badge"><div class="tmf-multicolor-dots">';
+    data.filaments.slice(0,5).forEach(function(f) {
+      html += '<span style="background:'+escHtml(f.color)+'"></span>';
+    });
+    html += '</div> MULTICOLORE ('+data.colorCount+' colori)</div>';
+  }
+  html += '</div>';
+
+  // --- Stat principali ---
+  html += '<div class="tmf-stat-grid">';
+  html += '<div class="tmf-stat"><div class="tmf-stat-label">Peso totale</div><div class="tmf-stat-value">'+(data.totalWeight ? data.totalWeight.toFixed(1)+'g' : '—')+'</div></div>';
+  html += '<div class="tmf-stat"><div class="tmf-stat-label">Tempo stampa</div><div class="tmf-stat-value">'+formatTime(data.totalTime)+'</div></div>';
+  html += '<div class="tmf-stat"><div class="tmf-stat-label">Filamenti</div><div class="tmf-stat-value">'+data.filaments.length+'</div></div>';
+  html += '</div>';
+
+  // --- Filamenti usati ---
+  if (data.filaments.length) {
+    html += '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Filamenti utilizzati</div>';
+    data.filaments.forEach(function(f) {
+      var colorLabel = f.colorName ? f.colorName : '';
+      html += '<div class="tmf-filament-row">';
+      html += '<div class="tmf-fil-swatch" style="background:'+escHtml(f.color)+'"></div>';
+      html += '<div class="tmf-fil-info"><div class="tmf-fil-name">'+escHtml(f.type)+(colorLabel ? ' — '+escHtml(colorLabel) : '')+'</div>';
+      html += '<div class="tmf-fil-meta">Slot '+(parseInt(f.id)+1)+(f.trayId !== f.id ? ' · Tray '+f.trayId : '')+'</div></div>';
+      html += '<div class="tmf-fil-weight">'+(f.weight ? f.weight.toFixed(1)+'g' : '—')+'</div>';
+      html += '</div>';
+    });
+  }
+
+  // --- Piatti ---
+  if (data.plates.length > 1) {
+    html += '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:1rem 0 8px">Piatti di stampa</div>';
+    data.plates.forEach(function(p, idx) {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--bg2);border-radius:var(--radius);margin-bottom:4px;border:1px solid var(--border)">';
+      html += '<span style="font-size:13px;color:var(--text)">'+escHtml(p.name)+'</span>';
+      html += '<span style="font-family:var(--mono);font-size:12px;color:var(--text2)">'+(p.weight?p.weight.toFixed(1)+'g':'—')+' · '+formatTime(p.time)+'</span>';
+      html += '</div>';
+    });
+  }
+
+  // --- Riepilogo prezzo ---
+  html += '<div class="tmf-price-summary">';
+  html += '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Stima prezzo</div>';
+
+  pricing.items.forEach(function(item) {
+    html += '<div class="tmf-price-row"><span class="label">'+escHtml(item.name)+'</span><span class="value">€ '+item.val.toFixed(2)+'</span></div>';
+  });
+
+  if (data.isMulticolor) {
+    html += '<div class="tmf-price-row"><span class="label" style="color:var(--yellow)">Supplemento multicolore ('+data.colorCount+' colori)</span><span class="value" style="color:var(--yellow)">€ '+pricing.multicolorSurcharge.toFixed(2)+'</span></div>';
+  }
+
+  html += '<div class="tmf-price-total"><span class="label">Prezzo stimato</span><span class="value">€ '+pricing.total.toFixed(2)+'</span></div>';
+  html += '</div>';
+
+  // --- Azioni ---
+  html += '<div class="tmf-actions">';
+  html += '<button class="btn btn-primary" onclick="import3mfToCalc()" style="flex:1;justify-content:center;padding:10px">Importa nel calcolatore</button>';
+  html += '<button class="btn" onclick="document.getElementById(\'tmf-modal-backdrop\').classList.remove(\'open\')" style="padding:10px 16px">Chiudi</button>';
+  html += '</div>';
+
+  html += '</div>';
+  container.innerHTML = html;
+
+  // Salva i dati parsed nel window per l'import
+  window._tmf3mfData = data;
+  window._tmf3mfPricing = pricing;
+}
+
+// --- Calcolo prezzo basato sui parametri del gestionale ---
+function calc3mfPrice(data) {
+  var is_resin = printType === 'resin';
+  var mat_cost_kg = getSetting(is_resin ? 'resin_cost' : 'fdm_cost', is_resin ? 45 : 20);
+  var waste = getSetting('waste', 10);
+  var watts = getSetting(is_resin ? 'resin_w' : 'fdm_w', is_resin ? 60 : 120);
+  var kwh_cost = getSetting('kwh', 0.25);
+  var printer_price = getSetting(is_resin ? 'resin_price' : 'fdm_price', is_resin ? 250 : 350);
+  var life_h = Math.max(1, getSetting('life_h', 3000));
+  var maint = getSetting('maint', 0.05);
+  var labor = getSetting('labor', 15);
+  var setup = getSetting('setup', 15);
+  var overhead = getSetting('overhead', 0.20);
+  var markup_pct = getSetting('markup', 30);
+
+  var totalGrams = data.totalWeight || 0;
+  var totalHours = (data.totalTime || 0) / 3600;
+  var mat_eff = totalGrams * (1 + waste / 100);
+
+  var c_mat = (mat_eff / 1000) * mat_cost_kg;
+  var c_elec = (watts / 1000) * totalHours * kwh_cost;
+  var c_amor = (printer_price / life_h) * totalHours;
+  var c_maint = maint * totalHours;
+  var c_labor = labor * totalHours;
+  var c_setup = labor * (setup / 60);
+
+  // Supplemento multicolore: cambio filamento AMS
+  var multicolorSurcharge = 0;
+  if (data.isMulticolor && data.colorCount > 1) {
+    // €2 per colore aggiuntivo (oltre il primo) come costo base cambio/purge
+    multicolorSurcharge = (data.colorCount - 1) * 2;
+  }
+
+  var base = c_mat + c_elec + c_amor + c_maint + c_labor + c_setup + overhead + multicolorSurcharge;
+  var markup_amt = base * (markup_pct / 100);
+  var total = base + markup_amt;
+
+  return {
+    total: total,
+    base: base,
+    markup: markup_amt,
+    multicolorSurcharge: multicolorSurcharge,
+    items: [
+      {name: 'Materiale (' + (is_resin ? 'Resina' : 'FDM') + ') — ' + totalGrams.toFixed(1) + 'g', val: c_mat},
+      {name: 'Elettricità — ' + totalHours.toFixed(1) + 'h', val: c_elec},
+      {name: 'Ammortamento + manutenzione', val: c_amor + c_maint},
+      {name: 'Manodopera stampa', val: c_labor},
+      {name: 'Setup & post-processing', val: c_setup},
+      {name: 'Spese generali', val: overhead},
+      {name: 'Margine (' + markup_pct + '%)', val: markup_amt}
+    ]
+  };
+}
+
+// --- Importa i dati nel calcolatore ---
+function import3mfToCalc() {
+  var data = window._tmf3mfData;
+  if (!data) return;
+
+  // Reset calcolatore
+  oggettiRows = [];
+  nextOggettoId = 1;
+
+  // Se multiplate, aggiungi un oggetto per piatto
+  if (data.plates.length > 1) {
+    data.plates.forEach(function(p) {
+      oggettiRows.push({
+        id: nextOggettoId++,
+        name: p.name + (data.isMulticolor ? ' [multicolore]' : ''),
+        mat_g: p.weight || 0,
+        hours: p.time ? parseFloat((p.time / 3600).toFixed(2)) : 0
+      });
+    });
+  } else {
+    // Singolo oggetto
+    var name = data.fileName.replace(/\.3mf$/i, '');
+    if (data.isMulticolor) name += ' [multicolore ' + data.colorCount + ' colori]';
+    var filTypes = data.filaments.map(function(f){return f.type;}).filter(function(v,i,a){return a.indexOf(v)===i;});
+    if (filTypes.length) name += ' (' + filTypes.join('+') + ')';
+
+    oggettiRows.push({
+      id: nextOggettoId++,
+      name: name,
+      mat_g: data.totalWeight || 0,
+      hours: data.totalTime ? parseFloat((data.totalTime / 3600).toFixed(2)) : 0
+    });
+  }
+
+  // Aggiorna il calcolatore
+  renderOggettiRows();
+  liveCalc();
+
+  // Aggiungi nota con dettagli filamenti
+  var noteLines = ['[Importato da .3mf: ' + data.fileName + ']'];
+  data.filaments.forEach(function(f) {
+    noteLines.push('• ' + f.type + ' — ' + (f.colorName || f.color) + (f.weight ? ' (' + f.weight.toFixed(1) + 'g)' : ''));
+  });
+  if (data.isMulticolor) noteLines.push('⚠ Stampa multicolore: ' + data.colorCount + ' colori — richiede AMS');
+  var noteEl = document.getElementById('c_notes');
+  if (noteEl) noteEl.value = noteLines.join('\n');
+
+  // Chiudi modal
+  document.getElementById('tmf-modal-backdrop').classList.remove('open');
+
+  showToast({
+    id: 'tmf-import',
+    title: 'File .3mf importato!',
+    body: data.totalWeight.toFixed(1) + 'g · ' + formatTime(data.totalTime) +
+      (data.isMulticolor ? ' · ' + data.colorCount + ' colori' : ''),
+    duration: 4000
+  });
+}
+</script>
 
 <!-- SCRIPT IA -->
 <script>
