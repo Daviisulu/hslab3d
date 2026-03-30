@@ -5728,87 +5728,228 @@ function parseBambuEmail() {
 
   var found = [];
 
-  // Strategy 1: match known product codes anywhere in text (BF01-W, BPLA-K, etc.)
+  // ── Strategy 0: Bambu Lab EU Italian order email format ──────────────────
+  // Matches blocks like:
+  //   PETG HF x 2
+  //   Nero (33102) / Refill / 1 kg
+  // or:
+  //   PLA Basic x 3
+  //   Bianco (33100) / Filamento con bobina / 1 kg
+  var BAMBU_EU_MATERIALS = {
+    'petg hf':'PETG HF','petg basic':'PETG Basic','petg':'PETG Basic',
+    'pla basic':'PLA Basic','pla matte':'PLA Matte','pla silk':'PLA Silk',
+    'pla+':'PLA+','pla plus':'PLA+','pla':'PLA Basic',
+    'abs':'ABS','asa':'ASA','tpu 95a':'TPU 95A','tpu':'TPU 95A',
+    'pa-cf':'PA-CF','pet-cf':'PET-CF','pa12 cf':'PA-CF',
+    'pla-cf':'PLA-CF','petg cf':'PETG-CF',
+    'support':'Support W',
+  };
+  var BAMBU_EU_COLORS = {
+    'nero':'K','bianco':'W','rosso':'R','blu':'B','verde':'G',
+    'giallo':'Y','arancione':'O','viola':'V','grigio':'GR',
+    'marrone':'BR','ciano':'C','oro':'GD','argento':'SV','bronzo':'BZ',
+    'black':'K','white':'W','red':'R','blue':'B','green':'G',
+    'yellow':'Y','orange':'O','purple':'V','grey':'GR','gray':'GR',
+    'brown':'BR','cyan':'C','gold':'GD','silver':'SV','bronze':'BZ',
+    'natural':'W','naturale':'W','lime':'GN','neon':'GN',
+  };
+  // Bambu EU color codes (numeric) → color key
+  var BAMBU_EU_COLOR_CODES = {
+    '33100':'W','33101':'K','33102':'K','33103':'R','33104':'B','33105':'G',
+    '33106':'Y','33107':'O','33108':'V','33109':'GR','33110':'BR','33111':'C',
+    '33112':'GD','33113':'SV','33114':'BZ','33115':'GN',
+    // PETG HF specific codes
+    '43100':'W','43101':'K','43102':'K','43103':'R','43104':'B',
+    // generic fallback ranges
+  };
+  var BAMBU_EU_BOBINA_TYPE = {
+    'refill': 'Refill',
+    'filamento con bobina': 'Bobina',
+    'filament with spool': 'Bobina',
+    'spool': 'Bobina',
+    'lite': 'Lite',
+  };
+
+  var lines = text.split('\n');
+  var i = 0;
+  while(i < lines.length) {
+    var line = lines[i].trim();
+    var lc = line.toLowerCase();
+
+    // Detect a material line: "PETG HF x 2" or "PLA Basic x 5"
+    var matOrder = Object.keys(BAMBU_EU_MATERIALS).sort(function(a,b){return b.length-a.length;});
+    var detectedMat = null;
+    var lineQty = 1;
+    matOrder.forEach(function(k){
+      if(!detectedMat && lc.indexOf(k)>=0) detectedMat = BAMBU_EU_MATERIALS[k];
+    });
+
+    if(detectedMat) {
+      // Extract quantity from same line: "x 2", "x2", "× 5"
+      var qtyM = line.match(/[x×]\s*(\d+)/i);
+      if(qtyM) lineQty = parseInt(qtyM[1])||1;
+
+      // Look ahead up to 3 lines for color/code line
+      var colorCode = null;
+      var colorLabel = null;
+      var bobinaType = 'Bobina';
+      var weightKg = 1;
+
+      for(var j=1; j<=3 && (i+j)<lines.length; j++) {
+        var nextLine = lines[i+j].trim();
+        var nlc = nextLine.toLowerCase();
+
+        // Color code (numeric) e.g. "(33102)"
+        var codeM = nextLine.match(/\((\d{4,6})\)/);
+        if(codeM && BAMBU_EU_COLOR_CODES[codeM[1]]) {
+          colorCode = BAMBU_EU_COLOR_CODES[codeM[1]];
+        }
+
+        // Color by name from color keywords
+        if(!colorCode) {
+          var colorKOrder = Object.keys(BAMBU_EU_COLORS).sort(function(a,b){return b.length-a.length;});
+          colorKOrder.forEach(function(k){
+            if(!colorCode && nlc.indexOf(k)>=0) colorCode = BAMBU_EU_COLORS[k];
+          });
+        }
+        // Color label (Italian) from same line
+        if(colorCode) {
+          var colorKOrder2 = Object.keys(BAMBU_EU_COLORS).sort(function(a,b){return b.length-a.length;});
+          colorKOrder2.forEach(function(k){
+            if(BAMBU_EU_COLORS[k]===colorCode && !colorLabel) colorLabel = k.charAt(0).toUpperCase()+k.slice(1);
+          });
+        }
+
+        // Bobina type: Refill, Bobina, Lite
+        Object.keys(BAMBU_EU_BOBINA_TYPE).forEach(function(k){
+          if(nlc.indexOf(k)>=0) bobinaType = BAMBU_EU_BOBINA_TYPE[k];
+        });
+
+        // Weight: "1 kg", "0.5 kg", "500g"
+        var wM = nextLine.match(/(\d+(?:\.\d+)?)\s*kg/i);
+        if(wM) weightKg = parseFloat(wM[1])||1;
+        var wMg = nextLine.match(/(\d+(?:\.\d+)?)\s*g\b/i);
+        if(wMg && !wM) weightKg = (parseFloat(wMg[1])||1000)/1000;
+
+        // Stop scanning if we hit a new product line (another material)
+        var isNewProduct = false;
+        matOrder.forEach(function(k){ if(nlc.indexOf(k)>=0 && nextLine.match(/[x×]\s*\d+/i)) isNewProduct=true; });
+        if(isNewProduct && j>0) break;
+      }
+
+      if(colorCode) {
+        var hex = BAMBU_HEX[colorCode]||'#888888';
+        var displayColor = (BAMBU_COLORS[colorCode]||colorCode) + (bobinaType!=='Bobina'?' ('+bobinaType+')':'');
+        found.push({
+          type: detectedMat,
+          colorCode: colorCode,
+          colorLabel: displayColor,
+          colorHex: hex,
+          qty: lineQty,
+          weightG: Math.round(weightKg * 1000),
+          bobinaType: bobinaType,
+          source: 'eu'
+        });
+        i += 2; // skip next line (already parsed)
+        continue;
+      }
+    }
+    i++;
+  }
+
+  // ── Strategy 1: match known product codes (BF01-W, BPLA-K, etc.) ─────────
   var allCodes = Object.keys(BAMBU_DB);
   allCodes.forEach(function(code) {
     var re = new RegExp('\\b'+code.replace('-','[\\-\\s]?')+'\\b','gi');
     var matches = text.match(re);
     if(matches) {
-      matches.forEach(function() {
-        found.push({code: code, type: BAMBU_DB[code], colorCode: code.split('-')[1]||'W', qty:1});
+      var colorCode = code.split('-')[1]||'W';
+      var already = found.some(function(f){
+        return f.source!=='eu' && f.code===code;
       });
+      if(!already) {
+        matches.forEach(function() {
+          found.push({
+            code: code,
+            type: BAMBU_DB[code],
+            colorCode: colorCode,
+            colorLabel: BAMBU_COLORS[colorCode]||colorCode,
+            colorHex: BAMBU_HEX[colorCode]||'#888888',
+            qty: 1,
+            weightG: 1000,
+            bobinaType: 'Bobina',
+            source: 'code'
+          });
+        });
+      }
     }
   });
 
-  // Strategy 2: scan lines for "Bambu" keyword + color + material keywords
-  var matKeywords = {
-    'pla basic':'PLA Basic','pla matte':'PLA Matte','pla silk':'PLA Silk','pla+':'PLA+','pla plus':'PLA+',
-    'petg':'PETG Basic','abs':'ABS','asa':'ASA','tpu':'TPU 95A','pa-cf':'PA-CF','pet-cf':'PET-CF',
-    'pla':'PLA Basic'
-  };
-  var colorKeywords = {
-    'white':'W','bianco':'W','black':'K','nero':'K','red':'R','rosso':'R','blue':'B','blu':'B',
-    'green':'G','verde':'G','yellow':'Y','giallo':'Y','orange':'O','arancione':'O','purple':'V',
-    'viola':'V','grey':'GR','gray':'GR','grigio':'GR','brown':'BR','marrone':'BR','cyan':'C',
-    'gold':'GD','oro':'GD','silver':'SV','argento':'SV','bronze':'BZ','bronzo':'BZ',
-  };
-
-  text.split('\n').forEach(function(line) {
-    var lc = line.toLowerCase();
-    if(lc.indexOf('bambu')<0 && lc.indexOf('filament')<0 && lc.indexOf('filamento')<0) return;
-    var detectedMat = null;
-    var matOrder = Object.keys(matKeywords).sort(function(a,b){return b.length-a.length;});
-    matOrder.forEach(function(k){if(!detectedMat && lc.indexOf(k)>=0) detectedMat=matKeywords[k];});
-    var detectedColor = null;
-    Object.keys(colorKeywords).forEach(function(k){if(!detectedColor && lc.indexOf(k)>=0) detectedColor=colorKeywords[k];});
-    if(detectedMat && detectedColor) {
-      var syntheticCode = Object.keys(BAMBU_DB).find(function(c){
-        return BAMBU_DB[c]===detectedMat && c.split('-')[1]===detectedColor;
-      }) || null;
-      if(!syntheticCode) return;
-      var already = found.some(function(f){return f.code===syntheticCode;});
-      if(!already) found.push({code:syntheticCode, type:detectedMat, colorCode:detectedColor, qty:1});
-    }
-  });
-
-  // Parse quantity from lines like "Qty: 2" or "x2" or "2x"
-  var qtyMap = {};
-  text.split('\n').forEach(function(line) {
-    allCodes.forEach(function(code){
-      if(line.toLowerCase().indexOf(code.toLowerCase())>=0) {
-        var m = line.match(/(?:qty|quantit[àa]|x)\s*[:=]?\s*(\d+)|(\d+)\s*x\b/i);
-        if(m) qtyMap[code] = parseInt(m[1]||m[2])||1;
+  // ── Strategy 2: keyword scan fallback ────────────────────────────────────
+  if(!found.length) {
+    var matKeywords = {
+      'pla basic':'PLA Basic','pla matte':'PLA Matte','pla silk':'PLA Silk','pla+':'PLA+',
+      'petg hf':'PETG HF','petg':'PETG Basic','abs':'ABS','asa':'ASA','tpu':'TPU 95A',
+      'pa-cf':'PA-CF','pet-cf':'PET-CF','pla':'PLA Basic'
+    };
+    var colorKeywords = {
+      'white':'W','bianco':'W','black':'K','nero':'K','red':'R','rosso':'R','blue':'B','blu':'B',
+      'green':'G','verde':'G','yellow':'Y','giallo':'Y','orange':'O','arancione':'O',
+      'purple':'V','viola':'V','grey':'GR','gray':'GR','grigio':'GR',
+      'brown':'BR','marrone':'BR','cyan':'C','gold':'GD','silver':'SV',
+    };
+    text.split('\n').forEach(function(line) {
+      var lc = line.toLowerCase();
+      var detMat = null;
+      var mko = Object.keys(matKeywords).sort(function(a,b){return b.length-a.length;});
+      mko.forEach(function(k){if(!detMat && lc.indexOf(k)>=0) detMat=matKeywords[k];});
+      var detColor = null;
+      Object.keys(colorKeywords).forEach(function(k){if(!detColor && lc.indexOf(k)>=0) detColor=colorKeywords[k];});
+      if(detMat && detColor) {
+        var already = found.some(function(f){return f.type===detMat && f.colorCode===detColor;});
+        if(!already) found.push({
+          type: detMat, colorCode: detColor,
+          colorLabel: BAMBU_COLORS[detColor]||detColor,
+          colorHex: BAMBU_HEX[detColor]||'#888888',
+          qty: 1, weightG: 1000, bobinaType: 'Bobina', source: 'kw'
+        });
       }
     });
-  });
-  found.forEach(function(f){if(qtyMap[f.code]) f.qty=qtyMap[f.code];});
+  }
 
-  // Deduplicate keeping max qty
+  // ── Deduplicate (same type + colorCode) keeping max qty ──────────────────
   var deduped = [];
   found.forEach(function(f){
-    var ex = deduped.find(function(d){return d.code===f.code;});
-    if(ex) { ex.qty = Math.max(ex.qty, f.qty); }
-    else deduped.push(f);
+    var ex = deduped.find(function(d){return d.type===f.type && d.colorCode===f.colorCode && d.bobinaType===f.bobinaType;});
+    if(ex) { ex.qty += f.qty; }
+    else deduped.push(JSON.parse(JSON.stringify(f)));
   });
 
   var preview = document.getElementById('bambu-preview');
   if(!deduped.length) {
-    preview.innerHTML='<div style="font-size:13px;color:var(--red);padding:.75rem 0">Nessun filamento Bambu Lab riconosciuto. Controlla che il testo contenga i codici prodotto (es. BF01-W) o le descrizioni dei filamenti.</div>';
+    preview.innerHTML='<div style="font-size:13px;color:var(--red);padding:.75rem 0">Nessun filamento Bambu Lab riconosciuto.<br>'+
+      '<span style="color:var(--text3)">Incolla il testo completo dell\'email d\'ordine Bambu Lab EU (inclusa la sezione "Riepilogo ordine").</span></div>';
     return;
   }
 
-  preview.innerHTML = '<div style="margin-top:4px"><div class="card-title" style="margin-bottom:8px">Filamenti riconosciuti — conferma per aggiungere</div>'+
+  preview.innerHTML = '<div style="margin-top:4px"><div class="card-title" style="margin-bottom:8px">Filamenti riconosciuti — conferma quantità e aggiungi</div>'+
     deduped.map(function(f,i){
-      var colorLabel = BAMBU_COLORS[f.colorCode]||f.colorCode;
-      var hex = BAMBU_HEX[f.colorCode]||'#888';
-      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)" id="bpreview-'+i+'">'+
-        '<div style="width:20px;height:20px;border-radius:4px;background:'+hex+';border:1px solid rgba(255,255,255,.15);flex-shrink:0"></div>'+
-        '<div style="flex:1;font-size:13px;color:var(--text)"><strong style="font-weight:500">'+escHtml(f.type)+'</strong> — '+escHtml(colorLabel)+'</div>'+
-        '<div style="font-family:var(--mono);font-size:11px;color:var(--text3)">'+escHtml(f.code)+'</div>'+
-        '<div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2)">×<input type="number" value="'+f.qty+'" min="1" max="20" style="width:45px;font-size:12px;padding:3px 6px" id="bq-'+i+'"> bobine</div>'+
+      return '<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)" id="bpreview-'+i+'">'+
+        '<div style="width:20px;height:20px;border-radius:4px;background:'+f.colorHex+';border:1px solid rgba(255,255,255,.15);flex-shrink:0"></div>'+
+        '<div>'+
+          '<div style="font-size:13px;color:var(--text);font-weight:500">'+escHtml(f.type)+'</div>'+
+          '<div style="font-size:11px;color:var(--text3);font-family:var(--mono)">'+escHtml(f.colorLabel)+(f.weightG!==1000?' · '+f.weightG+'g':'')+'</div>'+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--text3);font-family:var(--mono);white-space:nowrap">'+escHtml(f.bobinaType||'')+'</div>'+
+        '<div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2)">'+
+          '<span style="color:var(--text3)">×</span>'+
+          '<input type="number" value="'+f.qty+'" min="1" max="50" style="width:48px;font-size:12px;padding:3px 6px;text-align:center" id="bq-'+i+'">'+
+          '<span style="color:var(--text3)">bob.</span>'+
+        '</div>'+
       '</div>';
     }).join('')+
-    '<button class="btn btn-primary" style="margin-top:12px;width:100%;justify-content:center" onclick="confirmBambuImport('+JSON.stringify(deduped).replace(/"/g,"'")+')">Aggiungi tutti alla libreria</button>'+
+    '<button class="btn btn-primary" style="margin-top:12px;width:100%;justify-content:center" onclick="confirmBambuImport('+JSON.stringify(deduped).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026')+')">' +
+      '✓ Aggiungi tutti alla libreria</button>'+
   '</div>';
 }
 
@@ -5816,9 +5957,11 @@ function confirmBambuImport(items) {
   var added = 0;
   items.forEach(function(item, i) {
     var qtyEl = document.getElementById('bq-'+i);
-    var qty = qtyEl ? (parseInt(qtyEl.value)||1) : item.qty;
-    var colorLabel = BAMBU_COLORS[item.colorCode]||item.colorCode;
-    var hex = BAMBU_HEX[item.colorCode]||'#888888';
+    var qty = qtyEl ? (parseInt(qtyEl.value)||1) : (item.qty||1);
+    var colorLabel = item.colorLabel || BAMBU_COLORS[item.colorCode] || item.colorCode;
+    var hex = item.colorHex || BAMBU_HEX[item.colorCode] || '#888888';
+    var weightG = item.weightG || 1000;
+    var threshold = Math.round(weightG * 0.2);
     for(var q=0; q<qty; q++) {
       filaments.push({
         id: nextFilId++,
@@ -5826,9 +5969,9 @@ function confirmBambuImport(items) {
         type: item.type,
         color: colorLabel,
         colorHex: hex,
-        total: 1000,
-        remaining: 1000,
-        threshold: 200
+        totalWeight: weightG,
+        remaining: weightG,
+        threshold: threshold
       });
       added++;
     }
@@ -5841,7 +5984,7 @@ function confirmBambuImport(items) {
   if(t) t.value='';
   var p = document.getElementById('bambu-preview');
   if(p) p.innerHTML='';
-  alert('Aggiunte '+added+' bobine Bambu Lab!');
+  showToast({id:'bambu-ok', title:'Bambu Lab import completato', body:'Aggiunte '+added+' bobine alla libreria', duration:4000});
 }
 
 // ---- FILAMENTS ----
